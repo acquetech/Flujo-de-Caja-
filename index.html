@@ -567,14 +567,18 @@ async function cargar(){
   finally{document.getElementById('loading').hidden=true}
 }
 function corto(n){
-  const s=String(n||'').replace(/\(copia\)/gi,'').replace(/\bCta\.?\s*(Cte|Corriente|Ahorros?)\b[\s\S]*$/i,'').replace(/^\s*Bco\.?\s*/i,'Banco ').replace(/\s+/g,' ').trim();
+  const s=String(n||'').replace(/\(copia\)/gi,'').replace(/\bCta\.?\s*(Cte|Corriente|Ahorros?)\b[\s\S]*$/i,'').replace(/^\s*Bco\.?\s*/i,'Banco ')
+    .replace(/\s+(S\.?\s?A\.?|C\.?\s?A\.?)\s*$/i,'').replace(/\s+/g,' ').trim();
   return s||String(n||'');
 }
 function nombresCortos(lista){
   lista.forEach(b=>{b.nombre=corto(b.odoo)});
   const grupos={};lista.forEach(b=>{(grupos[b.nombre]=grupos[b.nombre]||[]).push(b)});
-  Object.values(grupos).filter(g=>g.length>1).forEach(g=>{let k=1;g.forEach(b=>{const dig=(String(b.odoo).match(/(\d{4,})\s*(\(copia\))?\s*$/i)||[])[1];
-    if(dig)b.nombre+=' ·'+dig.slice(-4);else if(k++>1)b.nombre+=' ('+(k-1)+')';})});
+  Object.values(grupos).filter(g=>g.length>1).forEach(g=>{
+    const tipo=b=>/ahorro/i.test(b.odoo)?'Ahorros':/\bc(ta)?\.?\s*cte|corriente/i.test(b.odoo)?'Cte.':'';
+    const tipos=g.map(tipo),distintos=new Set(tipos).size===g.length&&tipos.every(Boolean);
+    let k=1;g.forEach((b,i)=>{const dig=(String(b.odoo).match(/(\d{4,})\s*(\(copia\))?\s*$/i)||[])[1];
+      if(distintos)b.nombre+=' · '+tipos[i];else if(dig)b.nombre+=' ·'+dig.slice(-4);else if(k++>1)b.nombre+=' ('+(k-1)+')';})});
 }
 const totalBancos=()=>BANCOS.reduce((s,b)=>s+b.saldo,0)+CAJAS.reduce((s,b)=>s+b.saldo,0);
 const disponible=()=>ANCHOR+ROWS.reduce((s,r)=>s+r.monto,0);   // bancos + cajas + pagos/cobros sin conciliar
