@@ -543,7 +543,7 @@ async function cargar(){
       .map(x=>({cod:x.cuenta_codigo,odoo:x.nombre,nombre:x.nombre,saldo:num(x.saldo),ini:num(x.saldo_inicial)}));
     CAJAS=TODAS_CAJAS.filter(x=>Math.abs(x.saldo)>0.004);
     nombresCortos(BANCOS);
-    FACT=d.filter(x=>x.tipo!=='oc').map(x=>({key:x.clave,id:x.odoo_id,model:x.modelo,tipo:x.tipo==='cobrar'?'c':'p',doc:x.documento,
+    FACT=d.filter(x=>x.tipo!=='oc').map(x=>({key:x.clave,id:x.odoo_id,model:x.modelo,tipo:x.tipo==='cobrar'?'c':'p',...partirDoc(x.documento),
       partner:x.partner||'—',vence:(x.vence||x.fecha_documento||hoyS).slice(0,10),saldo:num(x.saldo),forma:x.forma_pago}));
     OC=d.filter(x=>x.tipo==='oc').map(x=>({key:x.clave,id:x.odoo_id,doc:x.documento,partner:x.partner||'—',
       creada:(x.fecha_documento||hoyS).slice(0,10),total:num(x.total),facturado:num(x.facturado),anticipos:num(x.anticipos),
@@ -587,6 +587,8 @@ function nombresCortos(lista){
     let k=1;g.forEach((b,i)=>{const dig=(String(b.odoo).match(/(\d{4,})\s*(\(copia\))?\s*$/i)||[])[1];
       if(distintos)b.nombre+=' · '+tipos[i];else if(dig)b.nombre+=' ·'+dig.slice(-4);else if(k++>1)b.nombre+=' ('+(k-1)+')';})});
 }
+// "001-002-000000193 (COT. 1076 ELABORACION...)" -> número corto + detalle aparte
+function partirDoc(t){const m=String(t||'').match(/^\s*([^()]+?)\s*\(([\s\S]*)\)\s*$/);return m?{doc:m[1],detalle:m[2]}:{doc:String(t||''),detalle:''}}
 const totalBancos=()=>BANCOS.reduce((s,b)=>s+b.saldo,0)+CAJAS.reduce((s,b)=>s+b.saldo,0);
 const disponible=()=>ANCHOR+ROWS.reduce((s,r)=>s+r.monto,0);   // bancos + cajas + pagos/cobros sin conciliar
 
@@ -601,7 +603,7 @@ function ocurrencias(c){
 /* ---------- movimientos proyectados ---------- */
 function movimientos(){
   const ps=new Set(S.pagadas),out=[];
-  FACT.forEach(f=>out.push({key:f.key,dir:f.tipo==='c'?'in':'out',tipo:'Factura',doc:f.doc,partner:f.partner,orig:f.vence,monto:f.saldo,model:f.model,oid:f.id,forma:f.forma}));
+  FACT.forEach(f=>out.push({key:f.key,dir:f.tipo==='c'?'in':'out',tipo:'Factura',doc:f.doc,detalle:f.detalle,partner:f.partner,orig:f.vence,monto:f.saldo,model:f.model,oid:f.id,forma:f.forma}));
   OC.filter(o=>o.saldo>0.01).forEach(o=>{const atrasada=o.vence<hoyS;
     out.push({key:o.key,dir:'out',tipo:'OC',doc:o.doc,partner:o.partner,orig:atrasada?viernes(1):o.vence,entrega:o.vence,pc:atrasada,monto:o.saldo,model:'purchase.order',oid:o.id,forma:o.forma})});
   CUOTAS.filter(c=>c.estado==='Esta semana'||c.estado==='Por vencer').forEach(c=>{const o=OBL.find(x=>x.op===c.op);
@@ -618,7 +620,7 @@ function movimientos(){
 const pillCls=e=>e==='Vencido'?'p-venc':e==='Vence esta semana'?'p-sem':e.startsWith('Fecha')||e==='Por confirmar'?'p-plan':'p-fut';
 const flujoM=()=>movimientos().filter(m=>!m.depurar);
 const tagHtml=m=>m.tipo==='Factura'?'<span class="tag t-fac">Factura</span>':m.tipo==='OC'?'<span class="tag t-oc">OC</span>':m.tipo==='Obligación'?'<span class="tag t-obl">Préstamo</span>':`<span class="tag t-man">${esc(m.cat)}</span>`;
-const docHtml=m=>`<button class="doclink" type="button" title="${esc(m.doc)}" data-open="${esc(m.key)}">${esc(m.doc)}</button>`+(m.oid?`<a class="ext" href="${odooUrl(m.model,m.oid)}" target="_blank" rel="noopener">Odoo ↗</a>`:'');
+const docHtml=m=>`<button class="doclink" type="button" title="${esc(m.detalle||m.doc)}" data-open="${esc(m.key)}">${esc(m.doc)}</button>`+(m.oid?`<a class="ext" href="${odooUrl(m.model,m.oid)}" target="_blank" rel="noopener">Odoo ↗</a>`:'');
 const sum=a=>a.reduce((s,m)=>s+m.monto,0);
 
 /* ---------- encabezado, KPIs y bancos ---------- */
@@ -724,7 +726,7 @@ let bIn=null;
 function renderCobranzas(M){
   renderBuckets('bucketsIn',M,'in',bIn);
   const q=norm(document.getElementById('qIn').value),e=document.getElementById('estIn').value;
-  const L=M.filter(m=>m.dir==='in'&&(!bIn||m.bucket===bIn)&&(!e||m.estado===e)&&(!q||norm(m.partner+' '+m.doc).includes(q)));
+  const L=M.filter(m=>m.dir==='in'&&(!bIn||m.bucket===bIn)&&(!e||m.estado===e)&&(!q||norm(m.partner+' '+m.doc+' '+(m.detalle||'')).includes(q)));
   let h=`<thead><tr><th>Estado</th><th>Vence</th><th>Cliente</th><th>Documento</th><th class="r">Días venc.</th><th class="r">Saldo</th><th>Cobro esperado</th><th>Última gestión</th><th></th></tr></thead><tbody>`;
   h+=L.map(m=>{const d=diff(hoyS,m.orig);
     return `<tr><td><span class="pill ${pillCls(m.estado)}">${m.estado}</span></td><td class="num">${fd(m.orig)}</td><td>${esc(m.partner)}</td><td>${docHtml(m)}</td>
@@ -744,7 +746,7 @@ function renderCobranzas(M){
 let bOut=null;const SEL=new Set();
 function filtradosOut(M){
   const q=norm(document.getElementById('qOut').value),t=document.getElementById('tipoOut').value,e=document.getElementById('estOut').value;
-  return M.filter(m=>m.dir==='out'&&(!bOut||m.bucket===bOut)&&(!t||m.tipo===t)&&(!e||m.estado===e)&&(!q||norm(m.partner+' '+m.doc).includes(q)));
+  return M.filter(m=>m.dir==='out'&&(!bOut||m.bucket===bOut)&&(!t||m.tipo===t)&&(!e||m.estado===e)&&(!q||norm(m.partner+' '+m.doc+' '+(m.detalle||'')).includes(q)));
 }
 const bancoNombre=c=>{const b=BANCOS.find(x=>x.cod===c);return b?b.nombre:''};
 function renderPagar(M){
@@ -840,6 +842,7 @@ function renderDrawer(){
       <dl class="dl"><dt>Estado</dt><dd><span class="pill ${pillCls(m.estado)}">${m.estado}</span></dd>
         <dt>${m.tipo==='OC'?'Entrega prevista (Odoo)':'Vence en Odoo'}</dt><dd class="num">${fdx(m.entrega||m.orig)}${m.pc?' · ya pasó, fecha de pago por confirmar':''}</dd>
         <dt>${m.dir==='in'?'Cobro esperado':'Pago planificado'}</dt><dd class="num ${m.prom?'moved':''}">${fdx(m.fecha)}${m.prom?' (movido)':''}</dd>
+        ${m.detalle?`<dt>Referencia</dt><dd style="font-weight:500">${esc(m.detalle)}</dd>`:''}
         ${m.forma?`<dt>${m.tipo==='Obligación'?'Detalle':'Forma de pago'}</dt><dd>${esc(m.forma)}</dd>`:''}</dl>
       ${m.oid?`<a class="btn odoo" href="${odooUrl(m.model,m.oid)}" target="_blank" rel="noopener">Abrir ${m.tipo==='OC'?'la orden de compra':'la factura'} en Odoo ↗</a>`:(m.tipo==='Obligación'?`<p class="hint">Cuota según la tabla de amortización del banco. Mover la fecha aquí no cambia la tabla.</p>`:`<p class="hint">Este ${verbo} es manual: no existe en Odoo.</p>`)}
       <div style="display:flex;flex-direction:column;gap:8px">
