@@ -131,6 +131,11 @@ a.ext:hover{text-decoration:underline}
 .p-venc{background:var(--out-soft);color:var(--out)} .p-sem{background:var(--amber-soft);color:var(--amber)}
 .p-plan{background:var(--plan-soft);color:var(--plan)} .p-fut{background:var(--surface-2);color:var(--muted)}
 .tag{font-size:.7rem;font-weight:700;border-radius:5px;padding:2px 7px}
+.t-obl{background:var(--plan-soft);color:var(--plan)}
+.prog{height:6px;border-radius:3px;background:var(--surface-2);overflow:hidden;min-width:80px}.prog i{display:block;height:100%;background:var(--brand-2)}
+.p-ok{background:var(--in-soft);color:var(--in)}
+.bank .val{font-family:var(--font-num);font-weight:600;font-size:1rem;color:var(--ink)}
+.bank .sub{font-size:.7rem;color:var(--muted);font-family:var(--font-num)}
 .t-fac{background:var(--brand-soft);color:var(--brand-2)} .t-oc{background:var(--violet-soft);color:var(--violet)} .t-man{background:var(--amber-soft);color:var(--amber)}
 .moved{color:var(--plan);font-weight:600}
 .notecell{max-width:220px;overflow:hidden;text-overflow:ellipsis;color:var(--muted);font-size:.8rem}
@@ -247,7 +252,7 @@ body{margin:0}
   <div class="kpis" id="kpis"></div>
 
   <div class="card">
-    <div class="headrow"><h2>Saldo por banco</h2><span class="hint">Cuentas 1010103xx de Odoo</span></div>
+    <div class="headrow"><h2>Saldo por banco</h2><span class="hint">Pasa el mouse sobre un banco para ver su cuenta en Odoo</span></div>
     <div class="banks" id="banks"></div>
   </div>
 
@@ -255,6 +260,8 @@ body{margin:0}
     <button role="tab" data-tab="flujo" aria-selected="true">Flujo semanal</button>
     <button role="tab" data-tab="cobranzas" aria-selected="false">Cobranzas</button>
     <button role="tab" data-tab="pagar" aria-selected="false">Cuentas por pagar</button>
+    <button role="tab" data-tab="obligaciones" aria-selected="false">Obligaciones financieras</button>
+    <button role="tab" data-tab="bancos" aria-selected="false">Movimientos bancarios</button>
     <button role="tab" data-tab="compromisos" aria-selected="false">Pagos e ingresos manuales</button>
     <button role="tab" data-tab="comportamiento" aria-selected="false">Comportamiento del dinero</button>
   </nav>
@@ -301,7 +308,7 @@ body{margin:0}
       <div class="filters">
         <div class="field" style="flex:1 1 220px"><label for="qOut">Proveedor</label><input id="qOut" type="search" placeholder="Escribe parte del nombre" list="dlProv" autocomplete="off"></div>
         <div class="field"><label for="tipoOut">Tipo</label>
-          <select id="tipoOut"><option value="">Todos</option><option value="Factura">Facturas</option><option value="OC">Órdenes de compra</option><option value="Compromiso">Pagos manuales</option></select></div>
+          <select id="tipoOut"><option value="">Todos</option><option value="Factura">Facturas</option><option value="OC">Órdenes de compra</option><option value="Obligación">Préstamos bancarios</option><option value="Compromiso">Pagos manuales</option></select></div>
         <div class="field"><label for="estOut">Estado</label>
           <select id="estOut"><option value="">Todos</option><option>Vencido</option><option>Vence esta semana</option><option>Fecha planificada</option><option>Por vencer</option></select></div>
         <button class="btn" id="selAllOut" type="button">Seleccionar lo filtrado</button>
@@ -316,6 +323,51 @@ body{margin:0}
         <div class="scroll"><table id="tblOC"></table></div>
       </details>
     </div>
+  </section>
+
+  <!-- OBLIGACIONES FINANCIERAS -->
+  <section class="panel" id="tab-obligaciones" hidden>
+    <div class="kpis" id="oblKpis"></div>
+    <div class="card">
+      <div class="headrow"><h2>Por banco</h2><span class="hint">Saldo de capital según la tabla de amortización de cada banco</span></div>
+      <div class="banks" id="oblBancos"></div>
+    </div>
+    <div class="card">
+      <h2>Operaciones</h2>
+      <div class="scroll"><table id="tblOps"></table></div>
+    </div>
+    <div class="card">
+      <div class="headrow"><h2>Vencimientos</h2></div>
+      <div class="filters">
+        <div class="field"><label for="oBanco">Banco</label><select id="oBanco"></select></div>
+        <div class="field"><label for="oEstado">Estado</label><select id="oEstado"><option value="">Todos</option><option>Esta semana</option><option>Por vencer</option><option>Revisar</option><option>Pagada</option><option>Antes de Odoo</option></select></div>
+        <div class="field"><label for="oRango">Mostrar</label><select id="oRango"><option value="90">Próximos 90 días y pendientes</option><option value="365">Próximos 12 meses y pendientes</option><option value="todo">Toda la tabla</option></select></div>
+      </div>
+      <p class="hint"><b>Pagada</b>: encontré en Odoo el débito del capital en la cuenta del préstamo (±12 días del vencimiento). <b>Revisar</b>: ya venció y no encuentro el registro en Odoo; puede estar pagada pero registrada distinto. Las cuotas por vencer entran solas al flujo semanal.</p>
+      <div class="scroll"><table id="tblCuotas"></table></div>
+    </div>
+    <div class="card">
+      <div class="headrow"><h2>Calendario de pagos por mes</h2><span class="hint">Cuotas pendientes (capital + interés + seguro)</span></div>
+      <div class="scroll"><table id="tblOblMes"></table></div>
+    </div>
+  </section>
+
+  <!-- MOVIMIENTOS BANCARIOS -->
+  <section class="panel" id="tab-bancos" hidden>
+    <div class="card">
+      <div class="filters">
+        <div class="field" style="flex:1 1 220px"><label for="mbCuenta">Cuenta</label><select id="mbCuenta"></select></div>
+        <div class="field"><label for="mbDesde">Desde</label><input id="mbDesde" type="date"></div>
+        <div class="field"><label for="mbHasta">Hasta</label><input id="mbHasta" type="date"></div>
+        <div class="field"><label for="mbTipo">Tipo</label><select id="mbTipo"><option value="">Entradas y salidas</option><option value="in">Solo entradas</option><option value="out">Solo salidas</option></select></div>
+        <div class="field" style="flex:1 1 200px"><label for="mbQ">Buscar</label><input id="mbQ" type="search" placeholder="Cliente, proveedor, concepto o asiento" autocomplete="off"></div>
+        <button class="btn pri" id="mbCopy" type="button">Copiar para Excel</button>
+      </div>
+      <p class="hint">Extracto de cada banco y caja tal como está en Odoo, con saldo corrido. El saldo final al día de hoy coincide con el saldo contable de la cuenta.</p>
+      <textarea class="fallback" id="mbFallback" hidden readonly aria-label="Extracto para copiar"></textarea>
+    </div>
+    <div class="kpis" id="mbKpis"></div>
+    <div class="card"><div class="scroll"><table id="tblMB"></table></div></div>
   </section>
 
   <!-- COMPROMISOS -->
@@ -405,7 +457,7 @@ body{margin:0}
 /* =================== CONFIGURACIÓN =================== */
 const CONFIG={
   SUPABASE_URL:'https://pibqdgbjiashqldimmsx.supabase.co',
-  SUPABASE_ANON_KEY:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBpYnFkZ2JqaWFzaHFsZGltbXN4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIwNzAwNDcsImV4cCI6MjEwNzY0NjA0N30.2K_KHTi3dqZFLlBM8FHOQu1ZjJRdG_77crxdp54_zn8',          // Supabase > Project Settings > API Keys > anon (public)
+  SUPABASE_ANON_KEY:'PEGA_AQUI_LA_ANON_KEY',          // Supabase > Project Settings > API Keys > anon (public)
   ODOO:'https://semgroup.odoo.com',
   EMPRESA:'ACQUE-TECNOLOGIA C.A.',
   INICIO_ODOO:'2026-01-01',                           // Acque arrancó en Odoo en esta fecha
@@ -442,7 +494,7 @@ const num=v=>Number(v)||0;
 
 /* =================== DATOS (se llenan desde Supabase) =================== */
 const COLORES=['--b1','--b2','--b3','--b4','--b5','--b6'];
-let BANCOS=[],CAJAS=[],FACT=[],OC=[],ROWS=[],ANCHOR=0,CUENTAS=[],CTA_NOM={},USER='',SYNC=null;
+let TODAS_CAJAS=[],OBL=[],CUOTAS=[],MB=[],BANCOS=[],CAJAS=[],FACT=[],OC=[],ROWS=[],ANCHOR=0,CUENTAS=[],CTA_NOM={},USER='',SYNC=null;
 let S={promesas:{},hist:{},comps:[],pagadas:[],mapeo:{}};
 const CAT_EG=['Nómina','IESS','SRI','Préstamos','Servicios básicos','Otros pagos'];
 const CAT_IN=['Otros ingresos','Aporte de capital','Venta de activo','Préstamo recibido'];
@@ -464,17 +516,20 @@ async function traerTodo(tabla,orden){
 async function cargar(){
   document.getElementById('loading').hidden=false;
   try{
-    const [b,d,m,a,map,g,h,c,p,log]=await Promise.all([
+    const [b,d,m,a,map,g,h,c,p,log,ob,oc,mb]=await Promise.all([
       traerTodo('fs_bancos'),traerTodo('fs_documentos'),traerTodo('fs_movimientos_caja','odoo_line_id'),
       traerTodo('fs_saldo_ancla'),traerTodo('fs_mapeo_cuentas'),traerTodo('fs_gestion'),
       traerTodo('fs_gestion_historial','creado'),traerTodo('fs_compromisos','creado'),traerTodo('fs_compromisos_pagados'),
-      sb.from('fs_sync_log').select('*').eq('estado','ok').order('fin',{ascending:false}).limit(1).then(r=>r.data||[])
+      sb.from('fs_sync_log').select('*').eq('estado','ok').order('fin',{ascending:false}).limit(1).then(r=>r.data||[]),
+      traerTodo('fs_obligaciones'),traerTodo('fs_obligaciones_cuotas'),traerTodo('fs_movimientos_banco','odoo_line_id')
     ]);
     let i=0;
     BANCOS=b.filter(x=>CONFIG.CUENTAS_BANCO.includes(x.cuenta_codigo)).sort((x,y)=>x.cuenta_codigo.localeCompare(y.cuenta_codigo))
-      .map(x=>({cod:x.cuenta_codigo,nombre:x.nombre,saldo:num(x.saldo),c:COLORES[i++%COLORES.length]}));
-    CAJAS=b.filter(x=>!CONFIG.CUENTAS_BANCO.includes(x.cuenta_codigo)&&Math.abs(num(x.saldo))>0.004)
-      .map(x=>({cod:x.cuenta_codigo,nombre:x.nombre,saldo:num(x.saldo)}));
+      .map(x=>({cod:x.cuenta_codigo,odoo:x.nombre,nombre:x.nombre,saldo:num(x.saldo),ini:num(x.saldo_inicial),c:COLORES[i++%COLORES.length]}));
+    TODAS_CAJAS=b.filter(x=>!CONFIG.CUENTAS_BANCO.includes(x.cuenta_codigo)).sort((x,y)=>x.cuenta_codigo.localeCompare(y.cuenta_codigo))
+      .map(x=>({cod:x.cuenta_codigo,odoo:x.nombre,nombre:x.nombre,saldo:num(x.saldo),ini:num(x.saldo_inicial)}));
+    CAJAS=TODAS_CAJAS.filter(x=>Math.abs(x.saldo)>0.004);
+    nombresCortos(BANCOS);
     FACT=d.filter(x=>x.tipo!=='oc').map(x=>({key:x.clave,id:x.odoo_id,model:x.modelo,tipo:x.tipo==='cobrar'?'c':'p',doc:x.documento,
       partner:x.partner||'—',vence:(x.vence||x.fecha_documento||hoyS).slice(0,10),saldo:num(x.saldo),forma:x.forma_pago}));
     OC=d.filter(x=>x.tipo==='oc').map(x=>({key:x.clave,id:x.odoo_id,doc:x.documento,partner:x.partner||'—',
@@ -495,9 +550,25 @@ async function cargar(){
       fecha:x.fecha,mensual:!!x.mensual,hasta:x.hasta}));
     S.pagadas=p.map(x=>`${x.compromiso_id}|${x.fecha_ocurrencia}`);
     SYNC=log[0]||null;
+    OBL=ob.map(x=>({op:x.operacion,banco:x.banco,tipo:x.tipo||'',monto:num(x.monto_inicial),tn:x.tasa_nominal,te:x.tasa_efectiva,plazo:x.plazo_dias,n:x.num_cuotas,cuentas:x.cuentas_odoo||[],codeudor:x.codeudor,activo:x.activo!==false})).filter(o=>o.activo);
+    CUOTAS=oc.filter(x=>OBL.some(o=>o.op===x.operacion)).map(x=>({op:x.operacion,n:x.numero,vence:x.vence,capital:num(x.capital),interes:num(x.interes),seguro:num(x.seguro),otros:num(x.otros),total:num(x.total),saldo:num(x.saldo_capital)}));
+    MB=mb.map(x=>({id:x.odoo_line_id,mid:x.move_id,asiento:x.asiento||'',fecha:x.fecha,cod:x.cuenta_codigo,partner:x.partner||'',concepto:x.concepto||'',monto:num(x.monto),contra:x.contrapartida||''}))
+      .sort((x,y)=>x.fecha<y.fecha?-1:x.fecha>y.fecha?1:x.id-y.id);
+    evaluarCuotas();
+    prepararMB();
     render();
   }catch(e){toast('No se pudieron cargar los datos: '+e.message);console.error(e)}
   finally{document.getElementById('loading').hidden=true}
+}
+function corto(n){
+  const s=String(n||'').replace(/\(copia\)/gi,'').replace(/\bCta\.?\s*(Cte|Corriente|Ahorros?)\b[\s\S]*$/i,'').replace(/^\s*Bco\.?\s*/i,'Banco ').replace(/\s+/g,' ').trim();
+  return s||String(n||'');
+}
+function nombresCortos(lista){
+  lista.forEach(b=>{b.nombre=corto(b.odoo)});
+  const grupos={};lista.forEach(b=>{(grupos[b.nombre]=grupos[b.nombre]||[]).push(b)});
+  Object.values(grupos).filter(g=>g.length>1).forEach(g=>{let k=1;g.forEach(b=>{const dig=(String(b.odoo).match(/(\d{4,})\s*(\(copia\))?\s*$/i)||[])[1];
+    if(dig)b.nombre+=' ·'+dig.slice(-4);else if(k++>1)b.nombre+=' ('+(k-1)+')';})});
 }
 const totalBancos=()=>BANCOS.reduce((s,b)=>s+b.saldo,0)+CAJAS.reduce((s,b)=>s+b.saldo,0);
 const disponible=()=>ANCHOR+ROWS.reduce((s,r)=>s+r.monto,0);   // bancos + cajas + pagos/cobros sin conciliar
@@ -515,6 +586,9 @@ function movimientos(){
   const ps=new Set(S.pagadas),out=[];
   FACT.forEach(f=>out.push({key:f.key,dir:f.tipo==='c'?'in':'out',tipo:'Factura',doc:f.doc,partner:f.partner,orig:f.vence,monto:f.saldo,model:f.model,oid:f.id,forma:f.forma}));
   OC.filter(o=>o.saldo>0.01).forEach(o=>out.push({key:o.key,dir:'out',tipo:'OC',doc:o.doc,partner:o.partner,orig:o.vence,monto:o.saldo,model:'purchase.order',oid:o.id,forma:o.forma}));
+  CUOTAS.filter(c=>c.estado==='Esta semana'||c.estado==='Por vencer').forEach(c=>{const o=OBL.find(x=>x.op===c.op);
+    out.push({key:`obl:${c.op}|${c.n}`,dir:'out',tipo:'Obligación',doc:`${c.op} · cuota ${c.n}/${o.n}`,partner:o.banco,orig:c.vence,monto:c.total,cat:o.banco,
+      forma:`Capital ${$m(c.capital)} · Interés ${$m(c.interes)}${c.seguro+c.otros>0?` · Seguro/otros ${$m(c.seguro+c.otros)}`:''}`})});
   S.comps.forEach(c=>ocurrencias(c).forEach(f=>{const k=c.id+'|'+f;if(ps.has(k))return;
     out.push({key:k,dir:c.dir==='Ingreso'?'in':'out',tipo:'Compromiso',doc:c.concepto,partner:c.partner||'—',orig:f,monto:+c.monto,cat:c.categoria,compId:c.id})}));
   out.forEach(m=>{const p=S.promesas[m.key]||{};m.fecha=p.fecha||m.orig;m.nota=p.nota||'';m.banco=p.banco||'';m.prom=!!p.fecha;
@@ -523,7 +597,7 @@ function movimientos(){
   return out.sort((a,b)=>a.fecha<b.fecha?-1:a.fecha>b.fecha?1:b.monto-a.monto);
 }
 const pillCls=e=>e==='Vencido'?'p-venc':e==='Vence esta semana'?'p-sem':e.startsWith('Fecha')?'p-plan':'p-fut';
-const tagHtml=m=>m.tipo==='Factura'?'<span class="tag t-fac">Factura</span>':m.tipo==='OC'?'<span class="tag t-oc">OC</span>':`<span class="tag t-man">${esc(m.cat)}</span>`;
+const tagHtml=m=>m.tipo==='Factura'?'<span class="tag t-fac">Factura</span>':m.tipo==='OC'?'<span class="tag t-oc">OC</span>':m.tipo==='Obligación'?'<span class="tag t-obl">Préstamo</span>':`<span class="tag t-man">${esc(m.cat)}</span>`;
 const docHtml=m=>`<button class="doclink" type="button" data-open="${esc(m.key)}">${esc(m.doc)}</button>`+(m.oid?`<a class="ext" href="${odooUrl(m.model,m.oid)}" target="_blank" rel="noopener">Odoo ↗</a>`:'');
 const sum=a=>a.reduce((s,m)=>s+m.monto,0);
 
@@ -546,7 +620,7 @@ function renderTop(M){
     ['k-prox','Saldo fin próxima semana',$m(finProx),`Cierre al ${fd(FIN_PROX)}`,finProx<0?'neg':''],
   ];
   document.getElementById('kpis').innerHTML=k.map(x=>`<div class="kpi ${x[0]}"><span class="eyebrow">${x[1]}</span><span class="v ${x[4]}">${x[2]}</span><span class="s">${x[3]}</span></div>`).join('');
-  document.getElementById('banks').innerHTML=BANCOS.map(b=>`<div class="bank" style="--bc:var(${b.c})"><i></i><div><span title="${esc(b.nombre)}">${esc(b.cod)} · ${esc(b.nombre)}</span><span>${$m(b.saldo)}</span></div></div>`).join('')+
+  document.getElementById('banks').innerHTML=BANCOS.map(b=>`<div class="bank" style="--bc:var(${b.c})" title="${esc(b.cod)} · ${esc(b.odoo)}"><i></i><div><span>${esc(b.nombre)}</span><span>${$m(b.saldo)}</span></div></div>`).join('')+
     CAJAS.map(b=>`<div class="bank" style="--bc:var(--muted)"><i></i><div><span title="${esc(b.nombre)}">${esc(b.nombre)}</span><span>${$m(b.saldo)}</span></div></div>`).join('');
 }
 
@@ -564,6 +638,7 @@ function filas(M){
   [...new Set(M.filter(m=>m.dir==='in'&&m.tipo==='Compromiso').map(m=>m.cat))].forEach(c=>rows.push({id:'in_'+c,label:c,f:m=>m.dir==='in'&&m.tipo==='Compromiso'&&m.cat===c}));
   rows.push({id:'tin',label:'Total ingresos',cls:'t-in',f:m=>m.dir==='in'});
   rows.push({g:'Egresos',cls:'g-out'},{id:'out_fact',label:'Facturas de proveedores',f:m=>m.dir==='out'&&m.tipo==='Factura'},{id:'out_oc',label:'Órdenes de compra',f:m=>m.dir==='out'&&m.tipo==='OC'});
+  [...new Set(M.filter(m=>m.tipo==='Obligación').map(m=>m.cat))].forEach(c=>rows.push({id:'obl_'+c,label:'Préstamos '+c,f:m=>m.tipo==='Obligación'&&m.cat===c}));
   [...new Set(M.filter(m=>m.dir==='out'&&m.tipo==='Compromiso').map(m=>m.cat))].forEach(c=>rows.push({id:'out_'+c,label:c,f:m=>m.dir==='out'&&m.tipo==='Compromiso'&&m.cat===c}));
   rows.push({id:'tout',label:'Total egresos',cls:'t-out',f:m=>m.dir==='out'});
   return rows;
@@ -731,8 +806,8 @@ function renderDrawer(){
       <dl class="dl"><dt>Estado</dt><dd><span class="pill ${pillCls(m.estado)}">${m.estado}</span></dd>
         <dt>Vence en Odoo</dt><dd class="num">${fdx(m.orig)}</dd>
         <dt>${m.dir==='in'?'Cobro esperado':'Pago planificado'}</dt><dd class="num ${m.prom?'moved':''}">${fdx(m.fecha)}${m.prom?' (movido)':''}</dd>
-        ${m.forma?`<dt>Forma de pago</dt><dd>${esc(m.forma)}</dd>`:''}</dl>
-      ${m.oid?`<a class="btn odoo" href="${odooUrl(m.model,m.oid)}" target="_blank" rel="noopener">Abrir ${m.tipo==='OC'?'la orden de compra':'la factura'} en Odoo ↗</a>`:`<p class="hint">Este ${verbo} es manual: no existe en Odoo.</p>`}
+        ${m.forma?`<dt>${m.tipo==='Obligación'?'Detalle':'Forma de pago'}</dt><dd>${esc(m.forma)}</dd>`:''}</dl>
+      ${m.oid?`<a class="btn odoo" href="${odooUrl(m.model,m.oid)}" target="_blank" rel="noopener">Abrir ${m.tipo==='OC'?'la orden de compra':'la factura'} en Odoo ↗</a>`:(m.tipo==='Obligación'?`<p class="hint">Cuota según la tabla de amortización del banco. Mover la fecha aquí no cambia la tabla.</p>`:`<p class="hint">Este ${verbo} es manual: no existe en Odoo.</p>`)}
       <div style="display:flex;flex-direction:column;gap:8px">
         <h2 style="font-size:.95rem">Mover el ${verbo} a</h2>
         <div class="quick">${opciones.map(o=>`<button type="button" data-move="${o[1]}" class="${m.prom&&m.fecha===o[1]?'on':''}">${o[0]}<span>${fdx(o[1])}</span></button>`).join('')}</div>
@@ -921,9 +996,113 @@ document.getElementById('rCopy').addEventListener('click',()=>{
   copiar(lines.join('\n'),'rFallback','Informe copiado. Pégalo en Excel.');
 });
 
+/* ---------- obligaciones financieras ---------- */
+function evaluarCuotas(){
+  const usados=new Set();
+  CUOTAS.sort((a,b)=>a.vence<b.vence?-1:a.vence>b.vence?1:0);
+  CUOTAS.forEach(c=>{
+    const o=OBL.find(x=>x.op===c.op);c.pago=null;
+    if(c.vence<CONFIG.INICIO_ODOO){c.estado='Antes de Odoo';return}
+    const cand=ROWS.filter(r=>!usados.has(r.id)&&o.cuentas.includes(r.cuenta)&&r.monto<0&&Math.abs(diff(r.fecha,c.vence))<=12&&
+      [c.capital,c.total,c.capital+c.interes].some(v=>Math.abs(-r.monto-v)<=1))
+      .sort((a,b)=>Math.abs(diff(a.fecha,c.vence))-Math.abs(diff(b.fecha,c.vence)))[0];
+    if(cand){usados.add(cand.id);c.estado='Pagada';c.pago=cand;return}
+    c.estado=c.vence<hoyS?'Revisar':c.vence<=FIN_SEM?'Esta semana':'Por vencer';
+  });
+}
+const oblPill=e=>e==='Pagada'?'p-ok':e==='Revisar'?'p-venc':e==='Esta semana'?'p-sem':e==='Antes de Odoo'?'p-fut':'p-plan';
+function saldoTabla(op){const cs=CUOTAS.filter(c=>c.op===op&&c.vence<=hoyS);const o=OBL.find(x=>x.op===op);return cs.length?cs[cs.length-1].saldo:o.monto}
+function renderObl(){
+  if(!OBL.length){document.getElementById('oblKpis').innerHTML='';document.getElementById('tblOps').innerHTML='<tbody><tr><td class="empty">No hay obligaciones cargadas.</td></tr></tbody>';return}
+  const pend=CUOTAS.filter(c=>c.estado==='Esta semana'||c.estado==='Por vencer');
+  const d30=off(30),en30=pend.filter(c=>c.vence<=d30),rev=CUOTAS.filter(c=>c.estado==='Revisar');
+  const saldoTot=OBL.reduce((s,o)=>s+saldoTabla(o.op),0),intPend=pend.reduce((s,c)=>s+c.interes,0);
+  document.getElementById('oblKpis').innerHTML=[
+    ['k-out','Deuda bancaria (capital)',$m(saldoTot),`${OBL.length} operaciones vigentes`,''],
+    ['k-sal','Cuotas próximos 30 días',$m(en30.reduce((s,c)=>s+c.total,0)),`${en30.length} cuotas hasta el ${fd(d30)}`,''],
+    ['k-prox','Intereses por pagar',$m(intPend),'Lo que resta de intereses según las tablas',''],
+    [rev.length?'k-out':'k-in','Cuotas a revisar',String(rev.length),rev.length?`${$m(rev.reduce((s,c)=>s+c.total,0))} vencidas sin registro en Odoo`:'Todas las vencidas están en Odoo',rev.length?'neg':'pos'],
+  ].map(x=>`<div class="kpi ${x[0]}"><span class="eyebrow">${x[1]}</span><span class="v ${x[4]}">${x[2]}</span><span class="s">${x[3]}</span></div>`).join('');
+  const bancos=[...new Set(OBL.map(o=>o.banco))];
+  document.getElementById('oblBancos').innerHTML=bancos.map((bn,k)=>{const ops=OBL.filter(o=>o.banco===bn),sal=ops.reduce((s,o)=>s+saldoTabla(o.op),0);
+    const prox=pend.filter(c=>ops.some(o=>o.op===c.op))[0];
+    return `<div class="bank" style="--bc:var(${COLORES[k%COLORES.length]})"><i></i><div><span>${esc(bn)} · ${ops.length} op.</span><span class="val">${$m(sal)}</span><span class="sub">${prox?`Próxima: ${fdx(prox.vence)} · ${$m(prox.total)}`:'Sin cuotas pendientes'}</span></div></div>`}).join('');
+  document.getElementById('tblOps').innerHTML=`<thead><tr><th>Banco</th><th>Operación</th><th>Tipo</th><th class="r">Monto</th><th class="r">Tasa efectiva</th><th class="r">Cuotas</th><th class="r">Saldo capital</th><th>Avance</th><th>Próxima cuota</th></tr></thead><tbody>${
+    OBL.map(o=>{const sal=saldoTabla(o.op),av=o.monto?(1-sal/o.monto):0,prox=pend.find(c=>c.op===o.op),pag=CUOTAS.filter(c=>c.op===o.op&&c.vence<=hoyS).length;
+      return `<tr><td>${esc(o.banco)}</td><td class="num">${esc(o.op)}${o.codeudor?` <span class="tag t-man">Codeudor: ${esc(o.codeudor)}</span>`:''}</td><td>${esc(o.tipo)}</td><td class="r num">${$m(o.monto)}</td>
+      <td class="r num">${o.te!=null?Number(o.te).toLocaleString('es-EC',{maximumFractionDigits:2})+'%':'—'}</td><td class="r num">${pag}/${o.n}</td><td class="r num"><b>${$m(sal)}</b></td>
+      <td><div class="prog" title="${Math.round(av*100)}% pagado"><i style="width:${Math.round(av*100)}%"></i></div></td>
+      <td class="num">${prox?`${fdx(prox.vence)} · ${$m(prox.total)}`:'—'}</td></tr>`}).join('')
+  }</tbody><tfoot><tr><td colspan="3">Total</td><td class="r num">${$m(OBL.reduce((s,o)=>s+o.monto,0))}</td><td></td><td></td><td class="r num">${$m(saldoTot)}</td><td colspan="2"></td></tr></tfoot>`;
+  const ob=document.getElementById('oBanco');if(!ob.options.length)ob.innerHTML='<option value="">Todos</option>'+bancos.map(b=>`<option>${esc(b)}</option>`).join('');
+  const fb=ob.value,fe=document.getElementById('oEstado').value,fr=document.getElementById('oRango').value,lim=fr==='todo'?'9999-12-31':off(+fr);
+  const L=CUOTAS.filter(c=>{const o=OBL.find(x=>x.op===c.op);if(fb&&o.banco!==fb)return false;if(fe&&c.estado!==fe)return false;
+    if(fr!=='todo'&&!(c.estado==='Revisar'||((c.estado==='Esta semana'||c.estado==='Por vencer')&&c.vence<=lim)))return false;return true});
+  document.getElementById('tblCuotas').innerHTML=L.length?`<thead><tr><th>Vence</th><th>Banco</th><th>Operación</th><th class="r">Cuota</th><th class="r">Capital</th><th class="r">Interés</th><th class="r">Seguro/otros</th><th class="r">Total</th><th class="r">Saldo capital</th><th>Estado</th></tr></thead><tbody>${
+    L.map(c=>{const o=OBL.find(x=>x.op===c.op);return `<tr><td class="num">${fdx(c.vence)} ${c.vence.slice(0,4)}</td><td>${esc(o.banco)}</td><td class="num">${esc(c.op)}</td><td class="r num">${c.n}/${o.n}</td>
+      <td class="r num">${$m(c.capital)}</td><td class="r num">${$m(c.interes)}</td><td class="r num">${$m(c.seguro+c.otros)}</td><td class="r num"><b>${$m(c.total)}</b></td><td class="r num">${$m(c.saldo)}</td>
+      <td><span class="pill ${oblPill(c.estado)}">${c.estado}</span>${c.pago?` <a class="ext" href="${odooUrl('account.move',c.pago.mid)}" target="_blank" rel="noopener">${esc(c.pago.move)} ↗</a>`:''}</td></tr>`}).join('')
+  }</tbody><tfoot><tr><td colspan="4">${L.length} cuotas</td><td class="r num">${$m(L.reduce((s,c)=>s+c.capital,0))}</td><td class="r num">${$m(L.reduce((s,c)=>s+c.interes,0))}</td><td class="r num">${$m(L.reduce((s,c)=>s+c.seguro+c.otros,0))}</td><td class="r num">${$m(L.reduce((s,c)=>s+c.total,0))}</td><td colspan="2"></td></tr></tfoot>`
+    :'<tbody><tr><td class="empty">No hay cuotas con este filtro.</td></tr></tbody>';
+  const meses=[...new Set(pend.map(c=>c.vence.slice(0,7)))].sort().slice(0,18);
+  const celda=(bn,mm)=>pend.filter(c=>c.vence.startsWith(mm)&&OBL.find(o=>o.op===c.op).banco===bn).reduce((s,c)=>s+c.total,0);
+  document.getElementById('tblOblMes').innerHTML=meses.length?`<thead><tr><th>Banco</th>${meses.map(mm=>`<th class="r">${MESES[+mm.slice(5)-1]} ${mm.slice(2,4)}</th>`).join('')}<th class="r">Total</th></tr></thead><tbody>${
+    bancos.map(bn=>`<tr><td>${esc(bn)}</td>${meses.map(mm=>`<td class="r num">${$c(celda(bn,mm))}</td>`).join('')}<td class="r num"><b>${$c(meses.reduce((s,mm)=>s+celda(bn,mm),0))}</b></td></tr>`).join('')
+  }</tbody><tfoot><tr><td>Total</td>${meses.map(mm=>`<td class="r num">${$c(bancos.reduce((s,bn)=>s+celda(bn,mm),0))}</td>`).join('')}<td class="r num">${$c(pend.filter(c=>meses.includes(c.vence.slice(0,7))).reduce((s,c)=>s+c.total,0))}</td></tr></tfoot>`:'<tbody><tr><td class="empty">Sin cuotas pendientes.</td></tr></tbody>';
+}
+['oBanco','oEstado','oRango'].forEach(id=>document.getElementById(id).addEventListener('change',renderObl));
+
+/* ---------- movimientos bancarios (extracto) ---------- */
+let MB_LAST=null;
+function cuentasMB(){return [...BANCOS,...TODAS_CAJAS.filter(c=>Math.abs(c.saldo)>0.004||MB.some(m=>m.cod===c.cod))]}
+function prepararMB(){
+  const sel=document.getElementById('mbCuenta'),prev=sel.value;
+  sel.innerHTML='<option value="">Todos los bancos y cajas</option>'+cuentasMB().map(b=>`<option value="${b.cod}">${esc(b.nombre)}</option>`).join('');
+  if(prev)sel.value=prev;
+  const d=document.getElementById('mbDesde'),h=document.getElementById('mbHasta');
+  if(!d.value)d.value=iso(new Date(HOY.getFullYear(),HOY.getMonth(),1));if(!h.value)h.value=hoyS;
+  d.min=h.min=CONFIG.INICIO_ODOO;d.max=h.max=hoyS;
+}
+function renderMB(){
+  const cod=document.getElementById('mbCuenta').value,de=document.getElementById('mbDesde').value||CONFIG.INICIO_ODOO,ha=document.getElementById('mbHasta').value||hoyS;
+  const tipo=document.getElementById('mbTipo').value,q=norm(document.getElementById('mbQ').value);
+  const ctas=cod?cuentasMB().filter(b=>b.cod===cod):cuentasMB(),codes=new Set(ctas.map(b=>b.cod));
+  const base=MB.filter(m=>codes.has(m.cod));
+  let saldo=ctas.reduce((s,b)=>s+b.ini,0)+base.filter(m=>m.fecha<de).reduce((s,m)=>s+m.monto,0);
+  const ini=saldo,per=base.filter(m=>m.fecha>=de&&m.fecha<=ha);
+  const rows=per.map(m=>{saldo+=m.monto;return {...m,saldo}});
+  const fin=saldo,ent=per.filter(m=>m.monto>0).reduce((s,m)=>s+m.monto,0),sal=-per.filter(m=>m.monto<0).reduce((s,m)=>s+m.monto,0);
+  const vis=rows.filter(m=>(!tipo||(tipo==='in'?m.monto>0:m.monto<0))&&(!q||norm(m.partner+' '+m.concepto+' '+m.asiento+' '+m.contra).includes(q)));
+  const odooSaldo=ctas.reduce((s,b)=>s+b.saldo,0),cuadra=ha===hoyS?Math.abs(odooSaldo-fin)<0.05:null;
+  document.getElementById('mbKpis').innerHTML=[
+    ['k-bank','Saldo inicial',$m(ini),`Al ${fd(iso(addD(parse(de),-1)))}`,''],
+    ['k-in','Entradas',$m(ent),`${per.filter(m=>m.monto>0).length} movimientos`,'pos'],
+    ['k-out','Salidas',$m(sal),`${per.filter(m=>m.monto<0).length} movimientos`,'neg'],
+    ['k-sal','Saldo final',$m(fin),cuadra===null?`Al ${fd(ha)}`:cuadra?'Cuadra con el saldo de Odoo':`Odoo dice ${$m(odooSaldo)}: revisar`,cuadra===false?'neg':''],
+  ].map(x=>`<div class="kpi ${x[0]}"><span class="eyebrow">${x[1]}</span><span class="v ${x[4]}">${x[2]}</span><span class="s">${x[3]}</span></div>`).join('');
+  const nom=c=>{const b=cuentasMB().find(x=>x.cod===c);return b?b.nombre:c};
+  const MAX=1500,mostrar=vis.slice(-MAX);
+  MB_LAST={vis,ctas,de,ha,ini,fin};
+  document.getElementById('tblMB').innerHTML=vis.length?`<thead><tr><th>Fecha</th>${cod?'':'<th>Cuenta</th>'}<th>Asiento</th><th>Cliente / proveedor</th><th>Concepto</th><th>Contrapartida</th><th class="r">Entrada</th><th class="r">Salida</th><th class="r">Saldo</th></tr></thead><tbody>${
+    (vis.length>MAX?`<tr><td colspan="9" class="hint">Se muestran los últimos ${MAX} de ${vis.length} movimientos. Acota las fechas para ver el resto.</td></tr>`:'')+
+    mostrar.map(m=>`<tr><td class="num">${fd(m.fecha)}/${m.fecha.slice(2,4)}</td>${cod?'':`<td>${esc(nom(m.cod))}</td>`}<td><a class="ext" style="margin:0" href="${odooUrl('account.move',m.mid)}" target="_blank" rel="noopener">${esc(m.asiento)} ↗</a></td>
+      <td>${esc(m.partner)||'—'}</td><td class="notecell" title="${esc(m.concepto)}">${esc(m.concepto)||'—'}</td><td class="notecell" title="${esc(m.contra)}">${esc(m.contra)}</td>
+      <td class="r num pos">${m.monto>0?$m(m.monto):''}</td><td class="r num neg">${m.monto<0?$m(-m.monto):''}</td><td class="r num">${$m(m.saldo)}</td></tr>`).join('')
+  }</tbody>`:'<tbody><tr><td class="empty">Sin movimientos en este rango.</td></tr></tbody>';
+}
+['mbCuenta','mbDesde','mbHasta','mbTipo','mbQ'].forEach(id=>document.getElementById(id).addEventListener('input',renderMB));
+document.getElementById('mbCopy').addEventListener('click',()=>{
+  if(!MB_LAST)return;const n=v=>v.toFixed(2).replace('.',',');
+  const nom=c=>{const b=cuentasMB().find(x=>x.cod===c);return b?b.nombre:c};
+  const lines=[`${CONFIG.EMPRESA} · Movimientos bancarios del ${MB_LAST.de} al ${MB_LAST.ha}`,['Fecha','Cuenta','Asiento','Cliente/proveedor','Concepto','Contrapartida','Entrada','Salida','Saldo'].join('\t'),
+    ['','','','','Saldo inicial','','','',n(MB_LAST.ini)].join('\t')]
+    .concat(MB_LAST.vis.map(m=>[m.fecha,nom(m.cod),m.asiento,m.partner,(m.concepto||'').replace(/\s+/g,' '),m.contra,m.monto>0?n(m.monto):'',m.monto<0?n(-m.monto):'',n(m.saldo)].join('\t')));
+  copiar(lines.join('\n'),'mbFallback','Extracto copiado. Pégalo en Excel.');
+});
+
 /* ---------- render general ---------- */
 let currentTab='flujo';
-function render(){const M=movimientos();renderTop(M);renderChart(M);renderGrid(M);renderCobranzas(M);renderPagar(M);renderComps();renderReport()}
+function render(){const M=movimientos();renderTop(M);renderChart(M);renderGrid(M);renderCobranzas(M);renderPagar(M);renderObl();renderMB();renderComps();renderReport()}
 function toast(t){const d=document.createElement('div');d.className='toast';d.textContent=t;document.body.appendChild(d);setTimeout(()=>d.remove(),2600)}
 function copiar(txt,fbId,ok){
   const fb=document.getElementById(fbId);
@@ -934,7 +1113,7 @@ function copiar(txt,fbId,ok){
 /* ---------- eventos ---------- */
 document.querySelector('nav.tabs').addEventListener('click',e=>{const b=e.target.closest('button[data-tab]');if(!b)return;
   currentTab=b.dataset.tab;document.querySelectorAll('nav.tabs button').forEach(x=>x.setAttribute('aria-selected',x===b));
-  ['flujo','cobranzas','pagar','compromisos','comportamiento'].forEach(t=>document.getElementById('tab-'+t).hidden=t!==currentTab);
+  ['flujo','cobranzas','pagar','obligaciones','bancos','compromisos','comportamiento'].forEach(t=>document.getElementById('tab-'+t).hidden=t!==currentTab);
   try{localStorage.setItem('fs_acque_tab',currentTab)}catch(_){}
   renderSelbar(movimientos());});
 document.getElementById('grid').addEventListener('click',e=>{const td=e.target.closest('td.cell');if(!td)return;
