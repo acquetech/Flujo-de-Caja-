@@ -118,7 +118,7 @@ tbody tr:hover td{background:var(--surface-2)}
 .field label{font-size:.72rem;color:var(--muted);font-weight:600}
 input,select,textarea{font:inherit;font-size:.86rem;padding:7px 9px;border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--ink);min-width:0}
 td input.ed{width:11em} td input.edm{width:7.5em;text-align:right;font-family:var(--font-num)}
-.btn{font:inherit;font-size:.82rem;font-weight:700;padding:7px 12px;border-radius:7px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+.btn{white-space:nowrap;font:inherit;font-size:.82rem;font-weight:700;padding:7px 12px;border-radius:7px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
 .btn.pri{background:var(--brand);border-color:var(--brand);color:var(--on-brand)}
 .btn.odoo{background:var(--violet-soft);border-color:transparent;color:var(--violet)}
 .btn.sm{padding:4px 9px;font-size:.76rem}
@@ -142,7 +142,7 @@ a.ext:hover{text-decoration:underline}
 #gridDetail td,#repDetail td,#tblIn td,#tblOut td,#tblMB td,#tblCuotas td,#tblOps td,#tblOC td{white-space:normal;overflow-wrap:anywhere;vertical-align:top}
 #gridDetail td.num,#gridDetail td.r,#repDetail td.num,#repDetail td.r,#tblIn td.num,#tblIn td.r,#tblOut td.num,#tblOut td.r,#tblMB td.num,#tblMB td.r,#tblCuotas td.num,#tblCuotas td.r,#tblOps td.num,#tblOps td.r,#tblOC td.num,#tblOC td.r{white-space:nowrap;overflow-wrap:normal}
 #gridDetail td:has(.doclink),#tblIn td:has(.doclink),#tblOut td:has(.doclink){min-width:220px;max-width:420px}
-.doclink{text-align:left}
+.doclink{text-align:left;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .pill,.tag{white-space:nowrap}
 .notecell{max-width:220px;overflow:hidden;text-overflow:ellipsis;color:var(--muted);font-size:.8rem}
 tfoot td{font-weight:700;border-bottom:0}
@@ -312,6 +312,10 @@ body{margin:0}
   <section class="panel" id="tab-pagar" hidden>
     <div class="buckets" id="bucketsOut"></div>
     <div class="card">
+      <div class="headrow"><h2>Resumen por proveedor</h2><span class="hint" id="resOutHint"></span></div>
+      <div class="scroll"><table id="resOut"></table></div>
+    </div>
+    <div class="card">
       <div class="filters">
         <div class="field" style="flex:1 1 220px"><label for="qOut">Proveedor</label><input id="qOut" type="search" placeholder="Escribe parte del nombre" list="dlProv" autocomplete="off"></div>
         <div class="field"><label for="tipoOut">Tipo</label>
@@ -347,6 +351,7 @@ body{margin:0}
       <div class="headrow"><h2>Vencimientos</h2></div>
       <div class="filters">
         <div class="field"><label for="oBanco">Banco</label><select id="oBanco"></select></div>
+        <div class="field"><label for="oOp">Operación</label><select id="oOp"><option value="">Todas</option></select></div>
         <div class="field"><label for="oEstado">Estado</label><select id="oEstado"><option value="">Todos</option><option>Esta semana</option><option>Por vencer</option><option>Revisar</option><option>Pagada</option><option>Antes de Odoo</option></select></div>
         <div class="field"><label for="oRango">Mostrar</label><select id="oRango"><option value="90">Próximos 90 días y pendientes</option><option value="365">Próximos 12 meses y pendientes</option><option value="todo">Toda la tabla</option></select></div>
       </div>
@@ -613,7 +618,7 @@ function movimientos(){
 const pillCls=e=>e==='Vencido'?'p-venc':e==='Vence esta semana'?'p-sem':e.startsWith('Fecha')||e==='Por confirmar'?'p-plan':'p-fut';
 const flujoM=()=>movimientos().filter(m=>!m.depurar);
 const tagHtml=m=>m.tipo==='Factura'?'<span class="tag t-fac">Factura</span>':m.tipo==='OC'?'<span class="tag t-oc">OC</span>':m.tipo==='Obligación'?'<span class="tag t-obl">Préstamo</span>':`<span class="tag t-man">${esc(m.cat)}</span>`;
-const docHtml=m=>`<button class="doclink" type="button" data-open="${esc(m.key)}">${esc(m.doc)}</button>`+(m.oid?`<a class="ext" href="${odooUrl(m.model,m.oid)}" target="_blank" rel="noopener">Odoo ↗</a>`:'');
+const docHtml=m=>`<button class="doclink" type="button" title="${esc(m.doc)}" data-open="${esc(m.key)}">${esc(m.doc)}</button>`+(m.oid?`<a class="ext" href="${odooUrl(m.model,m.oid)}" target="_blank" rel="noopener">Odoo ↗</a>`:'');
 const sum=a=>a.reduce((s,m)=>s+m.monto,0);
 
 /* ---------- encabezado, KPIs y bancos ---------- */
@@ -629,7 +634,7 @@ function renderTop(M){
     `Partiendo del disponible real de hoy (<b>${$m(disp)}</b>), al cierre de la próxima semana quedarían <b>${$m(finProx)}</b>.`+
     (()=>{const d=M.filter(m=>m.depurar);return d.length?` No incluye <b>${$m(sum(d))}</b> en ${d.length} facturas de proveedores vencidas hace más de ${CONFIG.DIAS_DEPURAR} días (por depurar en Odoo).`:''})();
   const dep=M.filter(m=>m.depurar),dn=document.getElementById('depNote');
-  if(dn){dn.hidden=!dep.length;dn.innerHTML=dep.length?`El flujo no incluye <b>${$m(sum(dep))}</b> en ${dep.length} facturas de proveedores vencidas hace más de ${CONFIG.DIAS_DEPURAR} días. Están en Cuentas por pagar → "Por depurar". Si alguna sí se va a pagar, ponle fecha con <b>Gestionar</b> y vuelve al flujo.`:''}
+  if(dn){dn.hidden=!dep.length;dn.innerHTML=dep.length?`El flujo no incluye <b>${$m(sum(dep))}</b> en ${dep.length} facturas de proveedores vencidas hace más de ${CONFIG.DIAS_DEPURAR} días. Están en Cuentas por pagar → "Por depurar". Si alguna sí se va a pagar, ponle fecha con <b>Gestionar</b> y vuelve al flujo. <button class="btn sm" type="button" id="verDep" style="margin-left:6px">Ver las ${dep.length} facturas</button>`:''}
   const k=[
     ['k-bank','Saldo en bancos y cajas',$m(tb),'Saldo contable en Odoo',''],
     ['k-sal','Disponible real',$m(disp),`${pend<0?'Descontando':'Sumando'} ${$m(Math.abs(pend))} registrados sin conciliar`,disp<0?'neg':''],
@@ -757,6 +762,16 @@ function renderPagar(M){
     OC.map(o=>`<tr><td><a class="ext" style="margin:0;font-size:.86rem" href="${odooUrl('purchase.order',o.id)}" target="_blank" rel="noopener">${esc(o.doc)} ↗</a></td><td>${esc(o.partner)}</td><td class="num">${fd(o.creada)}</td><td class="r num">${$m(o.total)}</td><td class="r num">${$m(o.facturado)}</td><td class="r num">${$m(o.anticipos)}</td><td class="r num"><b>${$m(o.saldo)}</b></td><td>${esc(o.forma)}</td></tr>`).join('')
   }</tbody><tfoot><tr><td colspan="6">Saldo total por pagar en OC</td><td class="r num">${$m(OC.reduce((s,o)=>s+o.saldo,0))}</td><td></td></tr></tfoot>`;
   document.getElementById('dlProv').innerHTML=[...new Set(M.filter(m=>m.dir==='out').map(m=>m.partner))].sort().map(p=>`<option value="${esc(p)}">`).join('');
+  // Resumen por proveedor de lo que está filtrado
+  const g={};L.forEach(m=>{const o=g[m.partner]||(g[m.partner]={n:0,t:0,min:m.orig,venc:0});o.n++;o.t+=m.monto;if(m.orig<o.min)o.min=m.orig;if(m.orig<hoyS)o.venc+=m.monto});
+  const R=Object.entries(g).sort((a,b)=>b[1].t-a[1].t),TOP=15,tot=sum(L),mxR=R.length?R[0][1].t:1;
+  const etiq=bOut?(BK_OUT.find(b=>b[0]===bOut)||[,''])[1]:'Todo lo pendiente';
+  document.getElementById('resOutHint').textContent=`${etiq} · ${R.length} proveedores · ${L.length} documentos · toca un proveedor para filtrar`;
+  document.getElementById('resOut').innerHTML=R.length?`<thead><tr><th>Proveedor</th><th class="r">Docs</th><th class="r">Total</th><th class="r">% del total</th><th class="r">Vencido</th><th>Más antigua</th><th class="r">Días</th></tr></thead><tbody>${
+    R.slice(0,TOP).map(([n,o])=>`<tr class="toprow" data-prov="${esc(n)}" style="cursor:pointer"><td>${esc(n)}<div class="bar" style="width:${Math.max(3,o.t/mxR*100)}%;background:var(--out)"></div></td><td class="r num">${o.n}</td><td class="r num">${$m(o.t)}</td><td class="r num">${tot?Math.round(o.t/tot*100):0}%</td><td class="r num ${o.venc>0?'neg':''}">${$c(o.venc)}</td><td class="num">${fd(o.min)}/${o.min.slice(2,4)}</td><td class="r num">${Math.max(0,diff(hoyS,o.min))||'–'}</td></tr>`).join('')+
+    (R.length>TOP?`<tr><td colspan="7" class="hint">y ${R.length-TOP} proveedores más por ${$m(R.slice(TOP).reduce((s2,x)=>s2+x[1].t,0))}</td></tr>`:'')
+  }</tbody><tfoot><tr><td>Total</td><td class="r num">${L.length}</td><td class="r num">${$m(tot)}</td><td class="r num">100%</td><td class="r num">${$c(L.filter(m=>m.orig<hoyS).reduce((s2,m)=>s2+m.monto,0))}</td><td colspan="2"></td></tr></tfoot>`
+    :'<tbody><tr><td class="empty">Nada con este filtro.</td></tr></tbody>';
   renderSelbar(M);
 }
 function renderSelbar(M){
@@ -1048,14 +1063,18 @@ function renderObl(){
     return `<div class="bank" style="--bc:var(${COLORES[k%COLORES.length]})"><i></i><div><span>${esc(bn)} · ${ops.length} op.</span><span class="val">${$m(sal)}</span><span class="sub">${prox?`Próxima: ${fdx(prox.vence)} · ${$m(prox.total)}`:'Sin cuotas pendientes'}</span></div></div>`}).join('');
   document.getElementById('tblOps').innerHTML=`<thead><tr><th>Banco</th><th>Operación</th><th>Tipo</th><th class="r">Monto</th><th class="r">Tasa efectiva</th><th class="r">Cuotas</th><th class="r">Saldo capital</th><th>Avance</th><th>Próxima cuota</th></tr></thead><tbody>${
     OBL.map(o=>{const sal=saldoTabla(o.op),av=o.monto?(1-sal/o.monto):0,prox=pend.find(c=>c.op===o.op),pag=CUOTAS.filter(c=>c.op===o.op&&c.vence<=hoyS).length;
-      return `<tr><td>${esc(o.banco)}</td><td class="num">${esc(o.op)}${o.codeudor?` <span class="tag t-man">Codeudor: ${esc(o.codeudor)}</span>`:''}</td><td>${esc(o.tipo)}</td><td class="r num">${$m(o.monto)}</td>
+      return `<tr data-op="${esc(o.op)}" style="cursor:pointer" title="Ver las cuotas de esta operación"><td>${esc(o.banco)}</td><td class="num">${esc(o.op)}${o.codeudor?` <span class="tag t-man">Codeudor: ${esc(o.codeudor)}</span>`:''}</td><td>${esc(o.tipo)}</td><td class="r num">${$m(o.monto)}</td>
       <td class="r num">${o.te!=null?Number(o.te).toLocaleString('es-EC',{maximumFractionDigits:2})+'%':'—'}</td><td class="r num">${pag}/${o.n}</td><td class="r num"><b>${$m(sal)}</b></td>
       <td><div class="prog" title="${Math.round(av*100)}% pagado"><i style="width:${Math.round(av*100)}%"></i></div></td>
       <td class="num">${prox?`${fdx(prox.vence)} · ${$m(prox.total)}`:'—'}</td></tr>`}).join('')
   }</tbody><tfoot><tr><td colspan="3">Total</td><td class="r num">${$m(OBL.reduce((s,o)=>s+o.monto,0))}</td><td></td><td></td><td class="r num">${$m(saldoTot)}</td><td colspan="2"></td></tr></tfoot>`;
   const ob=document.getElementById('oBanco');if(!ob.options.length)ob.innerHTML='<option value="">Todos</option>'+bancos.map(b=>`<option>${esc(b)}</option>`).join('');
+  const opSel=document.getElementById('oOp'),opPrev=opSel.value;
+  opSel.innerHTML='<option value="">Todas</option>'+OBL.filter(o=>!ob.value||o.banco===ob.value).map(o=>`<option value="${esc(o.op)}">${esc(o.op)} · ${esc(o.banco)} · ${$c(o.monto)}</option>`).join('');
+  if([...opSel.options].some(x=>x.value===opPrev))opSel.value=opPrev;
+  const fop=opSel.value;
   const fb=ob.value,fe=document.getElementById('oEstado').value,fr=document.getElementById('oRango').value,lim=fr==='todo'?'9999-12-31':off(+fr);
-  const L=CUOTAS.filter(c=>{const o=OBL.find(x=>x.op===c.op);if(fb&&o.banco!==fb)return false;if(fe&&c.estado!==fe)return false;
+  const L=CUOTAS.filter(c=>{const o=OBL.find(x=>x.op===c.op);if(fb&&o.banco!==fb)return false;if(fop&&c.op!==fop)return false;if(fe&&c.estado!==fe)return false;
     if(fr!=='todo'&&!(c.estado==='Revisar'||((c.estado==='Esta semana'||c.estado==='Por vencer')&&c.vence<=lim)))return false;return true});
   document.getElementById('tblCuotas').innerHTML=L.length?`<thead><tr><th>Vence</th><th>Banco</th><th>Operación</th><th class="r">Cuota</th><th class="r">Capital</th><th class="r">Interés</th><th class="r">Seguro/otros</th><th class="r">Total</th><th class="r">Saldo capital</th><th>Estado</th></tr></thead><tbody>${
     L.map(c=>{const o=OBL.find(x=>x.op===c.op);return `<tr><td class="num">${fdx(c.vence)} ${c.vence.slice(0,4)}</td><td>${esc(o.banco)}</td><td class="num">${esc(c.op)}</td><td class="r num">${c.n}/${o.n}</td>
@@ -1069,7 +1088,10 @@ function renderObl(){
     bancos.map(bn=>`<tr><td>${esc(bn)}</td>${meses.map(mm=>`<td class="r num">${$c(celda(bn,mm))}</td>`).join('')}<td class="r num"><b>${$c(meses.reduce((s,mm)=>s+celda(bn,mm),0))}</b></td></tr>`).join('')
   }</tbody><tfoot><tr><td>Total</td>${meses.map(mm=>`<td class="r num">${$c(bancos.reduce((s,bn)=>s+celda(bn,mm),0))}</td>`).join('')}<td class="r num">${$c(pend.filter(c=>meses.includes(c.vence.slice(0,7))).reduce((s,c)=>s+c.total,0))}</td></tr></tfoot>`:'<tbody><tr><td class="empty">Sin cuotas pendientes.</td></tr></tbody>';
 }
-['oBanco','oEstado','oRango'].forEach(id=>document.getElementById(id).addEventListener('change',renderObl));
+document.getElementById('tblOps').addEventListener('click',e=>{const tr=e.target.closest('tr[data-op]');if(!tr)return;
+  document.getElementById('oBanco').value='';renderObl();document.getElementById('oOp').value=tr.dataset.op;document.getElementById('oRango').value='todo';renderObl();
+  document.getElementById('tblCuotas').scrollIntoView({behavior:'smooth',block:'start'});});
+['oBanco','oOp','oEstado','oRango'].forEach(id=>document.getElementById(id).addEventListener('change',renderObl));
 
 /* ---------- movimientos bancarios (extracto) ---------- */
 let MB_LAST=null;
@@ -1176,6 +1198,13 @@ document.getElementById('tblComp').addEventListener('click',async e=>{const b=e.
   const id=b.dataset.del;S.comps=S.comps.filter(c=>c.id!==id);pendingDel=null;render();
   await guardar(sb.from('fs_compromisos').delete().eq('id',id),'Eliminado');});
 document.getElementById('reload').addEventListener('click',cargar);
+document.getElementById('resOut').addEventListener('click',e=>{const tr=e.target.closest('tr[data-prov]');if(!tr)return;
+  const q=document.getElementById('qOut');q.value=q.value===tr.dataset.prov?'':tr.dataset.prov;renderPagar(movimientos());
+  document.getElementById('tblOut').scrollIntoView({behavior:'smooth',block:'start'});});
+document.addEventListener('click',e=>{if(e.target.id!=='verDep')return;
+  document.querySelector('nav.tabs button[data-tab="pagar"]').click();
+  bOut='dep';document.getElementById('estOut').value='';document.getElementById('tipoOut').value='';renderPagar(movimientos());
+  document.getElementById('tab-pagar').scrollIntoView({behavior:'smooth',block:'start'});});
 document.getElementById('logout').addEventListener('click',async()=>{await sb.auth.signOut();location.reload()});
 
 /* ---------- login y arranque ---------- */
