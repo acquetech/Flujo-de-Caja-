@@ -111,7 +111,7 @@ tbody tr:hover td{background:var(--surface-2)}
 .bucket .l{font-size:.76rem;color:var(--muted)}
 .bucket .t{font-size:.76rem;font-weight:700;color:var(--bc)}
 .bucket[aria-pressed="true"]{box-shadow:0 0 0 2px var(--bc)}
-.bk-venc{--bc:var(--out);--bs:var(--out-soft)} .bk-sem{--bc:var(--amber);--bs:var(--amber-soft)} .bk-prox{--bc:var(--plan);--bs:var(--plan-soft)} .bk-mas{--bc:var(--brand-2);--bs:var(--brand-soft)}
+.bk-venc{--bc:var(--out);--bs:var(--out-soft)} .bk-sem{--bc:var(--amber);--bs:var(--amber-soft)} .bk-prox{--bc:var(--plan);--bs:var(--plan-soft)} .bk-mas{--bc:var(--brand-2);--bs:var(--brand-soft)} .bk-dep{--bc:var(--muted);--bs:var(--surface-2)}
 /* Filtros y controles */
 .filters{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end}
 .field{display:flex;flex-direction:column;gap:3px;min-width:0}
@@ -283,6 +283,7 @@ body{margin:0}
       <div class="headrow"><h2>Flujo general por semana</h2>
         <p class="hint">Semanas de lunes a domingo. Toca una cifra para ver qué documentos la forman.</p></div>
       <div class="scroll"><table class="grid" id="grid"></table></div>
+      <div class="warnbox" id="depNote" hidden></div>
     </div>
     <div class="card" id="gridDetail" hidden></div>
   </section>
@@ -316,7 +317,7 @@ body{margin:0}
         <div class="field"><label for="tipoOut">Tipo</label>
           <select id="tipoOut"><option value="">Todos</option><option value="Factura">Facturas</option><option value="OC">Órdenes de compra</option><option value="Obligación">Préstamos bancarios</option><option value="Compromiso">Pagos manuales</option></select></div>
         <div class="field"><label for="estOut">Estado</label>
-          <select id="estOut"><option value="">Todos</option><option>Vencido</option><option>Vence esta semana</option><option>Fecha planificada</option><option>Por vencer</option></select></div>
+          <select id="estOut"><option value="">Todos</option><option>Vencido</option><option>Vence esta semana</option><option>Fecha planificada</option><option>Por confirmar</option><option>Por vencer</option><option>Por depurar</option></select></div>
         <button class="btn" id="selAllOut" type="button">Seleccionar lo filtrado</button>
       </div>
       <p class="hint">Marca casillas para armar la lista de pagos. Toca <b>Gestionar</b> para mover un pago de semana o asignarle banco.</p>
@@ -466,7 +467,8 @@ const CONFIG={
   SUPABASE_ANON_KEY:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBpYnFkZ2JqaWFzaHFsZGltbXN4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIwNzAwNDcsImV4cCI6MjEwNzY0NjA0N30.2K_KHTi3dqZFLlBM8FHOQu1ZjJRdG_77crxdp54_zn8',          // Supabase > Project Settings > API Keys > anon (public)
   ODOO:'https://semgroup.odoo.com',
   EMPRESA:'ACQUE-TECNOLOGIA C.A.',
-  INICIO_ODOO:'2026-01-01',                           // Acque arrancó en Odoo en esta fecha
+  INICIO_ODOO:'2026-01-01',
+  DIAS_DEPURAR:90,                                    // facturas de proveedores vencidas hace más de N días salen del saldo (por depurar)                           // Acque arrancó en Odoo en esta fecha
   CUENTAS_BANCO:['101010301','101010302','101010303','101010304','101010305','101010306'],
 };
 const sb=window.supabase.createClient(CONFIG.SUPABASE_URL,CONFIG.SUPABASE_ANON_KEY);
@@ -595,18 +597,21 @@ function ocurrencias(c){
 function movimientos(){
   const ps=new Set(S.pagadas),out=[];
   FACT.forEach(f=>out.push({key:f.key,dir:f.tipo==='c'?'in':'out',tipo:'Factura',doc:f.doc,partner:f.partner,orig:f.vence,monto:f.saldo,model:f.model,oid:f.id,forma:f.forma}));
-  OC.filter(o=>o.saldo>0.01).forEach(o=>out.push({key:o.key,dir:'out',tipo:'OC',doc:o.doc,partner:o.partner,orig:o.vence,monto:o.saldo,model:'purchase.order',oid:o.id,forma:o.forma}));
+  OC.filter(o=>o.saldo>0.01).forEach(o=>{const atrasada=o.vence<hoyS;
+    out.push({key:o.key,dir:'out',tipo:'OC',doc:o.doc,partner:o.partner,orig:atrasada?viernes(1):o.vence,entrega:o.vence,pc:atrasada,monto:o.saldo,model:'purchase.order',oid:o.id,forma:o.forma})});
   CUOTAS.filter(c=>c.estado==='Esta semana'||c.estado==='Por vencer').forEach(c=>{const o=OBL.find(x=>x.op===c.op);
     out.push({key:`obl:${c.op}|${c.n}`,dir:'out',tipo:'Obligación',doc:`${c.op} · cuota ${c.n}/${o.n}`,partner:o.banco,orig:c.vence,monto:c.total,cat:o.banco,
       forma:`Capital ${$m(c.capital)} · Interés ${$m(c.interes)}${c.seguro+c.otros>0?` · Seguro/otros ${$m(c.seguro+c.otros)}`:''}`})});
   S.comps.forEach(c=>ocurrencias(c).forEach(f=>{const k=c.id+'|'+f;if(ps.has(k))return;
     out.push({key:k,dir:c.dir==='Ingreso'?'in':'out',tipo:'Compromiso',doc:c.concepto,partner:c.partner||'—',orig:f,monto:+c.monto,cat:c.categoria,compId:c.id})}));
   out.forEach(m=>{const p=S.promesas[m.key]||{};m.fecha=p.fecha||m.orig;m.nota=p.nota||'';m.banco=p.banco||'';m.prom=!!p.fecha;
-    m.estado=m.prom&&m.fecha>=hoyS?(m.dir==='in'?'Fecha prometida':'Fecha planificada'):m.fecha<hoyS?'Vencido':m.fecha<=FIN_SEM?'Vence esta semana':'Por vencer';
-    m.bucket=m.fecha<hoyS?'venc':m.fecha<=FIN_SEM?'sem':m.fecha<=FIN_PROX?'prox':'mas';});
+    m.depurar=!m.prom&&m.dir==='out'&&m.tipo==='Factura'&&diff(hoyS,m.orig)>CONFIG.DIAS_DEPURAR;
+    m.estado=m.depurar?'Por depurar':m.prom&&m.fecha>=hoyS?(m.dir==='in'?'Fecha prometida':'Fecha planificada'):m.pc?'Por confirmar':m.fecha<hoyS?'Vencido':m.fecha<=FIN_SEM?'Vence esta semana':'Por vencer';
+    m.bucket=m.depurar?'dep':m.fecha<hoyS?'venc':m.fecha<=FIN_SEM?'sem':m.fecha<=FIN_PROX?'prox':'mas';});
   return out.sort((a,b)=>a.fecha<b.fecha?-1:a.fecha>b.fecha?1:b.monto-a.monto);
 }
-const pillCls=e=>e==='Vencido'?'p-venc':e==='Vence esta semana'?'p-sem':e.startsWith('Fecha')?'p-plan':'p-fut';
+const pillCls=e=>e==='Vencido'?'p-venc':e==='Vence esta semana'?'p-sem':e.startsWith('Fecha')||e==='Por confirmar'?'p-plan':'p-fut';
+const flujoM=()=>movimientos().filter(m=>!m.depurar);
 const tagHtml=m=>m.tipo==='Factura'?'<span class="tag t-fac">Factura</span>':m.tipo==='OC'?'<span class="tag t-oc">OC</span>':m.tipo==='Obligación'?'<span class="tag t-obl">Préstamo</span>':`<span class="tag t-man">${esc(m.cat)}</span>`;
 const docHtml=m=>`<button class="doclink" type="button" data-open="${esc(m.key)}">${esc(m.doc)}</button>`+(m.oid?`<a class="ext" href="${odooUrl(m.model,m.oid)}" target="_blank" rel="noopener">Odoo ↗</a>`:'');
 const sum=a=>a.reduce((s,m)=>s+m.monto,0);
@@ -621,7 +626,10 @@ function renderTop(M){
   document.getElementById('answer').innerHTML=
     `Esta semana hay que pagar <b>${$m(sum(outS)+sum(outV))}</b> (de eso, <b>${$m(sum(outV))}</b> ya está vencido) y se espera cobrar <b>${$m(sum(inS)+sum(inV))}</b>. `+
     `La próxima semana vencen pagos por <b>${$m(sum(outP))}</b> y cobros por <b>${$m(sum(inP))}</b>. `+
-    `Partiendo del disponible real de hoy (<b>${$m(disp)}</b>), al cierre de la próxima semana quedarían <b>${$m(finProx)}</b>.`;
+    `Partiendo del disponible real de hoy (<b>${$m(disp)}</b>), al cierre de la próxima semana quedarían <b>${$m(finProx)}</b>.`+
+    (()=>{const d=M.filter(m=>m.depurar);return d.length?` No incluye <b>${$m(sum(d))}</b> en ${d.length} facturas de proveedores vencidas hace más de ${CONFIG.DIAS_DEPURAR} días (por depurar en Odoo).`:''})();
+  const dep=M.filter(m=>m.depurar),dn=document.getElementById('depNote');
+  if(dn){dn.hidden=!dep.length;dn.innerHTML=dep.length?`El flujo no incluye <b>${$m(sum(dep))}</b> en ${dep.length} facturas de proveedores vencidas hace más de ${CONFIG.DIAS_DEPURAR} días. Están en Cuentas por pagar → "Por depurar". Si alguna sí se va a pagar, ponle fecha con <b>Gestionar</b> y vuelve al flujo.`:''}
   const k=[
     ['k-bank','Saldo en bancos y cajas',$m(tb),'Saldo contable en Odoo',''],
     ['k-sal','Disponible real',$m(disp),`${pend<0?'Descontando':'Sumando'} ${$m(Math.abs(pend))} registrados sin conciliar`,disp<0?'neg':''],
@@ -700,8 +708,9 @@ function renderGrid(M){
 
 /* ---------- buckets ---------- */
 const BK=[['venc','Vencido acumulado'],['sem','Vence esta semana'],['prox','Próxima semana'],['mas','Más adelante']];
+const BK_OUT=BK.concat([['dep',`Por depurar (+${CONFIG.DIAS_DEPURAR} días)`]]);
 function renderBuckets(id,M,dir,active){
-  document.getElementById(id).innerHTML=BK.map(b=>{const l=M.filter(m=>m.dir===dir&&m.bucket===b[0]);
+  document.getElementById(id).innerHTML=(dir==='out'?BK_OUT:BK).map(b=>{const l=M.filter(m=>m.dir===dir&&m.bucket===b[0]);
     return `<button type="button" class="bucket bk-${b[0]}" data-b="${b[0]}" aria-pressed="${active===b[0]}"><span class="t">${b[1]}</span><span class="v">${$m(sum(l))}</span><span class="l">${l.length} documentos${active===b[0]?' · filtrando':''}</span></button>`}).join('');
 }
 
@@ -814,7 +823,7 @@ function renderDrawer(){
       <span class="amt">${$m(m.monto)}</span></div>
     <div class="db">
       <dl class="dl"><dt>Estado</dt><dd><span class="pill ${pillCls(m.estado)}">${m.estado}</span></dd>
-        <dt>Vence en Odoo</dt><dd class="num">${fdx(m.orig)}</dd>
+        <dt>${m.tipo==='OC'?'Entrega prevista (Odoo)':'Vence en Odoo'}</dt><dd class="num">${fdx(m.entrega||m.orig)}${m.pc?' · ya pasó, fecha de pago por confirmar':''}</dd>
         <dt>${m.dir==='in'?'Cobro esperado':'Pago planificado'}</dt><dd class="num ${m.prom?'moved':''}">${fdx(m.fecha)}${m.prom?' (movido)':''}</dd>
         ${m.forma?`<dt>${m.tipo==='Obligación'?'Detalle':'Forma de pago'}</dt><dd>${esc(m.forma)}</dd>`:''}</dl>
       ${m.oid?`<a class="btn odoo" href="${odooUrl(m.model,m.oid)}" target="_blank" rel="noopener">Abrir ${m.tipo==='OC'?'la orden de compra':'la factura'} en Odoo ↗</a>`:(m.tipo==='Obligación'?`<p class="hint">Cuota según la tabla de amortización del banco. Mover la fecha aquí no cambia la tabla.</p>`:`<p class="hint">Este ${verbo} es manual: no existe en Odoo.</p>`)}
@@ -1112,7 +1121,7 @@ document.getElementById('mbCopy').addEventListener('click',()=>{
 
 /* ---------- render general ---------- */
 let currentTab='flujo';
-function render(){const M=movimientos();renderTop(M);renderChart(M);renderGrid(M);renderCobranzas(M);renderPagar(M);renderObl();renderMB();renderComps();renderReport()}
+function render(){const M=movimientos(),MF=M.filter(m=>!m.depurar);renderTop(M);renderChart(MF);renderGrid(MF);renderCobranzas(M);renderPagar(M);renderObl();renderMB();renderComps();renderReport()}
 function toast(t){const d=document.createElement('div');d.className='toast';d.textContent=t;document.body.appendChild(d);setTimeout(()=>d.remove(),2600)}
 function copiar(txt,fbId,ok){
   const fb=document.getElementById(fbId);
@@ -1127,10 +1136,10 @@ document.querySelector('nav.tabs').addEventListener('click',e=>{const b=e.target
   try{localStorage.setItem('fs_acque_tab',currentTab)}catch(_){}
   renderSelbar(movimientos());});
 document.getElementById('grid').addEventListener('click',e=>{const td=e.target.closest('td.cell');if(!td)return;
-  selCell=(selCell&&selCell.r===td.dataset.r&&selCell.c===td.dataset.c)?null:{r:td.dataset.r,c:td.dataset.c};renderGrid(movimientos());
+  selCell=(selCell&&selCell.r===td.dataset.r&&selCell.c===td.dataset.c)?null:{r:td.dataset.r,c:td.dataset.c};renderGrid(flujoM());
   if(selCell)document.getElementById('gridDetail').scrollIntoView({block:'nearest',behavior:'smooth'});});
 document.getElementById('grid').addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&e.target.matches('td.cell')){e.preventDefault();e.target.click()}});
-document.getElementById('gridDetail').addEventListener('click',e=>{if(e.target.id==='closeDet'){selCell=null;renderGrid(movimientos())}});
+document.getElementById('gridDetail').addEventListener('click',e=>{if(e.target.id==='closeDet'){selCell=null;renderGrid(flujoM())}});
 document.getElementById('bucketsIn').addEventListener('click',e=>{const b=e.target.closest('.bucket');if(!b)return;bIn=bIn===b.dataset.b?null:b.dataset.b;renderCobranzas(movimientos())});
 document.getElementById('bucketsOut').addEventListener('click',e=>{const b=e.target.closest('.bucket');if(!b)return;bOut=bOut===b.dataset.b?null:b.dataset.b;renderPagar(movimientos())});
 ['qIn','estIn'].forEach(id=>document.getElementById(id).addEventListener('input',()=>renderCobranzas(movimientos())));
