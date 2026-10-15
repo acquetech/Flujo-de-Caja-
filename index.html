@@ -138,6 +138,12 @@ a.ext:hover{text-decoration:underline}
 .bank .sub{font-size:.7rem;color:var(--muted);font-family:var(--font-num)}
 .t-fac{background:var(--brand-soft);color:var(--brand-2)} .t-oc{background:var(--violet-soft);color:var(--violet)} .t-man{background:var(--amber-soft);color:var(--amber)}
 .moved{color:var(--plan);font-weight:600}
+/* Tablas de detalle: el texto largo se acomoda en varias líneas en vez de estirar la tabla */
+#gridDetail td,#repDetail td,#tblIn td,#tblOut td,#tblMB td,#tblCuotas td,#tblOps td,#tblOC td{white-space:normal;overflow-wrap:anywhere;vertical-align:top}
+#gridDetail td.num,#gridDetail td.r,#repDetail td.num,#repDetail td.r,#tblIn td.num,#tblIn td.r,#tblOut td.num,#tblOut td.r,#tblMB td.num,#tblMB td.r,#tblCuotas td.num,#tblCuotas td.r,#tblOps td.num,#tblOps td.r,#tblOC td.num,#tblOC td.r{white-space:nowrap;overflow-wrap:normal}
+#gridDetail td:has(.doclink),#tblIn td:has(.doclink),#tblOut td:has(.doclink){min-width:220px;max-width:420px}
+.doclink{text-align:left}
+.pill,.tag{white-space:nowrap}
 .notecell{max-width:220px;overflow:hidden;text-overflow:ellipsis;color:var(--muted);font-size:.8rem}
 tfoot td{font-weight:700;border-bottom:0}
 .two{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:14px}
