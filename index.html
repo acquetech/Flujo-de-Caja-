@@ -740,9 +740,24 @@ function renderGrid(M){
   if(!r||!c){det.hidden=true;selCell=null;return}
   const L=M.filter(m=>r.f(m)&&c.test(m.fecha));det.hidden=false;
   det.innerHTML=`<div class="headrow"><h2>${esc(r.label)} · ${c.label} <span class="hint">(${c.sub})</span></h2><button class="btn sm" id="closeDet" type="button">Cerrar</button></div>`+
-    (L.length?`<div class="scroll"><table><thead><tr><th>Fecha</th><th>Nombre</th><th>Documento</th><th>Estado</th><th class="r">Monto</th><th></th></tr></thead><tbody>${
-      L.map(m=>`<tr><td class="num">${fd(m.fecha)}</td><td>${esc(m.partner)}</td><td>${docHtml(m)}</td><td><span class="pill ${pillCls(m.estado)}">${m.estado}</span></td><td class="r num">${$m(m.monto)}</td><td><button class="btn sm gest" type="button" data-open="${esc(m.key)}">Gestionar</button></td></tr>`).join('')
-    }</tbody><tfoot><tr><td colspan="4">${L.length} documentos</td><td class="r num">${$m(sum(L))}</td><td></td></tr></tfoot></table></div>`:`<p class="empty">Sin movimientos en esta celda.</p>`);
+    (L.length?detalleCelda(L):`<p class="empty">Sin movimientos en esta celda.</p>`);
+}
+// Detalle de una celda. Si hay OC, muestra Total OC, Facturado (si hay), Anticipos y Saldo que entra al flujo.
+function detalleCelda(L){
+  const ocDe=m=>m.tipo==='OC'?OC.find(o=>o.key===m.key):null;
+  const hayOC=L.some(m=>ocDe(m)),hayFac=L.some(m=>{const o=ocDe(m);return o&&o.facturado>0.004});
+  const tTot=L.reduce((s2,m)=>{const o=ocDe(m);return s2+(o?o.total:m.monto)},0);
+  const tFac=L.reduce((s2,m)=>{const o=ocDe(m);return s2+(o?o.facturado:0)},0);
+  const tAnt=L.reduce((s2,m)=>{const o=ocDe(m);return s2+(o?o.anticipos:0)},0);
+  const extraTh=hayOC?`<th class="r">Total OC</th>${hayFac?'<th class="r">Facturado</th>':''}<th class="r">Anticipos</th><th class="r">Saldo</th>`:'<th class="r">Monto</th>';
+  const fila=m=>{const o=ocDe(m);
+    if(!hayOC)return `<td class="r num">${$m(m.monto)}</td>`;
+    return o?`<td class="r num">${$m(o.total)}</td>${hayFac?`<td class="r num">${$m(o.facturado)}</td>`:''}<td class="r num">${o.anticipos>0.004?$m(o.anticipos):'–'}${antDeOC(o.id)}</td><td class="r num"><b>${$m(m.monto)}</b></td>`
+      :`<td class="r num">${$m(m.monto)}</td>${hayFac?'<td class="r num">–</td>':''}<td class="r num">–</td><td class="r num"><b>${$m(m.monto)}</b></td>`};
+  const pie=hayOC?`<td class="r num">${$m(tTot)}</td>${hayFac?`<td class="r num">${$m(tFac)}</td>`:''}<td class="r num">${$m(tAnt)}</td><td class="r num">${$m(sum(L))}</td>`:`<td class="r num">${$m(sum(L))}</td>`;
+  return `<div class="scroll"><table><thead><tr><th>Fecha</th><th>Nombre</th><th>Documento</th><th>Estado</th>${extraTh}<th></th></tr></thead><tbody>${
+    L.map(m=>`<tr><td class="num">${fd(m.fecha)}</td><td>${esc(m.partner)}</td><td>${docHtml(m)}</td><td><span class="pill ${pillCls(m.estado)}">${m.estado}</span></td>${fila(m)}<td><button class="btn sm gest" type="button" data-open="${esc(m.key)}">Gestionar</button></td></tr>`).join('')
+  }</tbody><tfoot><tr><td colspan="4">${L.length} documentos</td>${pie}<td></td></tr></tfoot></table></div>`;
 }
 
 /* ---------- buckets ---------- */
