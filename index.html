@@ -1168,6 +1168,7 @@ async function actualizarDesdeOdoo(){
   actualizando=true;
   const btn=document.getElementById('reload'),textoBtn=btn.textContent,t0=Date.now();
   const ESPERA_MAX=6*60*1000,CADA=8000;
+  let exito=false;
   btn.disabled=true;btn.textContent='Actualizando… 0:00';
   const reloj=setInterval(()=>{const s=Math.floor((Date.now()-t0)/1000);btn.textContent=`Actualizando… ${Math.floor(s/60)}:${pad(s%60)}`},1000);
   try{
@@ -1187,13 +1188,16 @@ async function actualizarDesdeOdoo(){
     }
     if(!listo)throw new Error('La actualización tarda más de lo normal o falló. Revisa GitHub > Actions.');
     await cargar();
-    toast('Datos de Odoo actualizados.',4000);
+    exito=true;
+    toast('Listo: datos de Odoo actualizados.',10000);
   }catch(e){
     console.error(e);
     await cargar();
     toast('No se actualizó desde Odoo: '+e.message,9000);
   }finally{
-    clearInterval(reloj);btn.disabled=false;btn.textContent=textoBtn;actualizando=false;
+    clearInterval(reloj);btn.disabled=false;actualizando=false;
+    if(exito){btn.textContent='✓ Actualizado';setTimeout(()=>{if(!actualizando)btn.textContent=textoBtn},15000)}
+    else btn.textContent=textoBtn;
   }
 }
 
