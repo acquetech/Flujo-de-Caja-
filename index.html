@@ -781,6 +781,12 @@ function filtradosOut(M){
   return M.filter(m=>m.dir==='out'&&(!bOut||m.bucket===bOut)&&(!t||m.tipo===t)&&(!e||m.estado===e)&&(!q||norm(m.partner+' '+m.doc+' '+(m.detalle||'')).includes(q)));
 }
 const bancoNombre=c=>{const b=BANCOS.find(x=>x.cod===c);return b?b.nombre:''};
+// Pagos de anticipo amarrados a una OC (vienen de fs_anticipos)
+function antDeOC(id){
+  if(!ANT)return '';
+  const L=ANT.filter(a=>a.ocIds.includes(id));
+  return L.map(a=>`<div style="font-size:.74rem;line-height:1.3;margin-top:2px"><a class="ext" style="margin:0" href="${odooUrl('account.payment',a.id)}" target="_blank" rel="noopener" title="${esc(a.concepto)}">${esc(a.pago)} · ${fd(a.fecha)} · ${$m(a.pend)} ↗</a></div>`).join('');
+}
 function renderPagar(M){
   renderBuckets('bucketsOut',M,'out',bOut);
   const L=filtradosOut(M);
@@ -793,7 +799,7 @@ function renderPagar(M){
   h+=`</tbody><tfoot><tr><td colspan="6">${L.length} documentos</td><td class="r num">${$m(sum(L))}</td><td colspan="3"></td></tr></tfoot>`;
   document.getElementById('tblOut').innerHTML=L.length?h:'<tbody><tr><td class="empty">Nada coincide con el filtro.</td></tr></tbody>';
   document.getElementById('tblOC').innerHTML=`<thead><tr><th>OC</th><th>Proveedor</th><th>Creada</th><th class="r">Total</th><th class="r">Facturado</th><th class="r">Anticipos</th><th class="r">Saldo</th><th>Forma de pago</th></tr></thead><tbody>${
-    OC.map(o=>`<tr><td><a class="ext" style="margin:0;font-size:.86rem" href="${odooUrl('purchase.order',o.id)}" target="_blank" rel="noopener">${esc(o.doc)} ↗</a></td><td>${esc(o.partner)}</td><td class="num">${fd(o.creada)}</td><td class="r num">${$m(o.total)}</td><td class="r num">${$m(o.facturado)}</td><td class="r num">${$m(o.anticipos)}</td><td class="r num"><b>${$m(o.saldo)}</b></td><td>${esc(o.forma)}</td></tr>`).join('')
+    OC.map(o=>`<tr><td><a class="ext" style="margin:0;font-size:.86rem" href="${odooUrl('purchase.order',o.id)}" target="_blank" rel="noopener">${esc(o.doc)} ↗</a></td><td>${esc(o.partner)}</td><td class="num">${fd(o.creada)}</td><td class="r num">${$m(o.total)}</td><td class="r num">${$m(o.facturado)}</td><td class="r num">${$m(o.anticipos)}${antDeOC(o.id)}</td><td class="r num"><b>${$m(o.saldo)}</b></td><td>${esc(o.forma)}</td></tr>`).join('')
   }</tbody><tfoot><tr><td colspan="6">Saldo total por pagar en OC</td><td class="r num">${$m(OC.reduce((s,o)=>s+o.saldo,0))}</td><td></td></tr></tfoot>`;
   document.getElementById('dlProv').innerHTML=[...new Set(M.filter(m=>m.dir==='out').map(m=>m.partner))].sort().map(p=>`<option value="${esc(p)}">`).join('');
   // Resumen por proveedor de lo que está filtrado
