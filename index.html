@@ -335,6 +335,15 @@ body{margin:0}
         <div class="scroll"><table id="tblOC"></table></div>
       </details>
     </div>
+    <div class="card" id="antCard">
+      <div class="headrow"><h2>Anticipos a proveedores pendientes de cruce</h2>
+        <div class="seg" role="group" aria-label="Filtrar anticipos" id="antSeg">
+          <button type="button" data-ant="" aria-pressed="true">Todos</button><button type="button" data-ant="Con OC" aria-pressed="false">Con OC</button><button type="button" data-ant="Sin OC" aria-pressed="false">Sin OC</button>
+        </div></div>
+      <p class="hint" id="antHint">Pagos registrados como anticipo en Odoo que todavía no se cruzan con una factura. <b>Con OC</b>: ya se restan del saldo de su OC en el flujo. <b>Sin OC</b>: el flujo no sabe a qué compra corresponden; si tienen OC o factura abierta, agrégalos en el campo Anticipos de la OC en Odoo.</p>
+      <div id="antSum"></div>
+      <div class="scroll"><table id="tblAnt"></table></div>
+    </div>
   </section>
 
   <!-- OBLIGACIONES FINANCIERAS -->
@@ -522,6 +531,7 @@ const num=v=>Number(v)||0;
 
 /* =================== DATOS (se llenan desde Supabase) =================== */
 const COLORES=['--b1','--b2','--b3','--b4','--b5','--b6'];
+let ANT=null,antFiltro='';
 let TODAS_CAJAS=[],OBL=[],CUOTAS=[],MB=[],BANCOS=[],CAJAS=[],FACT=[],OC=[],ROWS=[],ANCHOR=0,CUENTAS=[],CTA_NOM={},USER='',SYNC=null;
 let S={promesas:{},hist:{},comps:[],pagadas:[],mapeo:{}};
 const CAT_EG=['Nómina','IESS','SRI','Préstamos','Servicios básicos','Otros pagos'];
@@ -545,6 +555,8 @@ async function cargar(){
   document.getElementById('loading').hidden=false;
   refrescarDia();
   try{
+    // Anticipos: si la tabla todavía no existe, el resto del dashboard carga igual
+    const antP=traerTodo('fs_anticipos').catch(e=>{console.warn('fs_anticipos:',e.message);return null});
     const [b,d,m,a,map,g,h,c,p,log,ob,oc,mb]=await Promise.all([
       traerTodo('fs_bancos'),traerTodo('fs_documentos'),traerTodo('fs_movimientos_caja','odoo_line_id'),
       traerTodo('fs_saldo_ancla'),traerTodo('fs_mapeo_cuentas'),traerTodo('fs_gestion'),
@@ -583,6 +595,10 @@ async function cargar(){
     CUOTAS=oc.filter(x=>OBL.some(o=>o.op===x.operacion)).map(x=>({op:x.operacion,n:x.numero,vence:x.vence,capital:num(x.capital),interes:num(x.interes),seguro:num(x.seguro),otros:num(x.otros),total:num(x.total),saldo:num(x.saldo_capital)}));
     MB=mb.map(x=>({id:x.odoo_line_id,mid:x.move_id,asiento:x.asiento||'',fecha:x.fecha,cod:x.cuenta_codigo,partner:x.partner||'',concepto:x.concepto||'',monto:num(x.monto),contra:x.contrapartida||''}))
       .sort((x,y)=>x.fecha<y.fecha?-1:x.fecha>y.fecha?1:x.id-y.id);
+    const an=await antP;
+    ANT=an===null?null:an.map(x=>({id:x.odoo_id,pago:x.pago,fecha:x.fecha,partner:x.partner||'—',monto:num(x.monto),pend:num(x.pendiente),
+      estado:x.estado_pago||'',concepto:x.concepto||'',oc:x.oc||'',ocIds:String(x.oc_ids||'').split(',').filter(Boolean).map(Number),
+      ocEst:x.oc_estado||'',sit:x.situacion||'Sin OC'})).sort((a,b)=>a.fecha<b.fecha?1:a.fecha>b.fecha?-1:b.pend-a.pend);
     evaluarCuotas();
     prepararMB();
     render();
@@ -791,7 +807,33 @@ function renderPagar(M){
   }</tbody><tfoot><tr><td>Total</td><td class="r num">${L.length}</td><td class="r num">${$m(tot)}</td><td class="r num">100%</td><td class="r num">${$c(L.filter(m=>m.orig<hoyS).reduce((s2,m)=>s2+m.monto,0))}</td><td colspan="2"></td></tr></tfoot>`
     :'<tbody><tr><td class="empty">Nada con este filtro.</td></tr></tbody>';
   renderSelbar(M);
+  renderAnticipos();
 }
+const OC_EST={no:'Nada que facturar','to invoice':'Por facturar',invoiced:'Facturada'};
+function renderAnticipos(){
+  const card=document.getElementById('antCard');
+  if(ANT===null){document.getElementById('antSum').innerHTML='<div class="warnbox">Falta crear la tabla <b>fs_anticipos</b> en Supabase y correr la carga de Odoo.</div>';document.getElementById('tblAnt').innerHTML='';return}
+  const q=norm(document.getElementById('qOut').value);
+  const esSin=a=>a.sit!=='Con OC';
+  const L=ANT.filter(a=>(!antFiltro||(antFiltro==='Con OC'?!esSin(a):esSin(a)))&&(!q||norm(a.partner+' '+a.pago+' '+a.oc+' '+a.concepto).includes(q)));
+  const con=ANT.filter(a=>!esSin(a)),sin=ANT.filter(esSin),t=x=>x.reduce((s,a)=>s+a.pend,0);
+  document.getElementById('antSum').innerHTML=`<div class="filters" style="gap:18px;margin:4px 0 10px">
+    <span>Total pendiente de cruce <b class="num">${$m(t(ANT))}</b> <span class="hint">(${ANT.length})</span></span>
+    <span>Con OC <b class="num">${$m(t(con))}</b> <span class="hint">(${con.length})</span></span>
+    <span>Sin OC <b class="num ${sin.length?'neg':''}">${$m(t(sin))}</b> <span class="hint">(${sin.length})</span></span></div>`;
+  document.getElementById('tblAnt').innerHTML=L.length?`<thead><tr><th>Fecha</th><th>Pago</th><th>Proveedor</th><th>OC</th><th>Situación</th><th>Concepto</th><th class="r">Monto pagado</th><th class="r">Pendiente de cruce</th></tr></thead><tbody>${
+    L.map(a=>`<tr><td class="num">${fd(a.fecha)}/${String(a.fecha).slice(2,4)}</td>
+      <td><a class="ext" style="margin:0;font-size:.86rem" href="${odooUrl('account.payment',a.id)}" target="_blank" rel="noopener">${esc(a.pago)} ↗</a>${a.estado==='in_process'?' <span class="pill p-sem">En proceso</span>':''}</td>
+      <td>${esc(a.partner)}</td>
+      <td>${a.ocIds.length?a.oc.split(', ').map((n,i)=>`<a class="ext" style="margin:0;font-size:.86rem" href="${odooUrl('purchase.order',a.ocIds[i])}" target="_blank" rel="noopener">${esc(n)} ↗</a>`).join(' ')+`<div class="hint">${esc(a.ocEst.split(', ').map(e=>OC_EST[e]||e).join(', '))}</div>`:'<span class="hint">—</span>'}</td>
+      <td><span class="pill ${esSin(a)?'p-venc':'p-plan'}">${esc(a.sit)}</span></td>
+      <td class="hint" style="max-width:280px">${esc(a.concepto)}</td>
+      <td class="r num">${$m(a.monto)}</td><td class="r num"><b>${$m(a.pend)}</b></td></tr>`).join('')
+  }</tbody><tfoot><tr><td colspan="6">${L.length} anticipos</td><td class="r num">${$m(L.reduce((s,a)=>s+a.monto,0))}</td><td class="r num">${$m(t(L))}</td></tr></tfoot>`
+  :'<tbody><tr><td class="empty">No hay anticipos con este filtro.</td></tr></tbody>';
+}
+document.getElementById('antSeg').addEventListener('click',e=>{const b=e.target.closest('[data-ant]');if(!b)return;
+  antFiltro=b.dataset.ant;document.querySelectorAll('#antSeg [data-ant]').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));renderAnticipos()});
 function renderSelbar(M){
   const bar=document.getElementById('selbar');
   [...SEL].forEach(k=>{if(!M.some(m=>m.key===k))SEL.delete(k)});
