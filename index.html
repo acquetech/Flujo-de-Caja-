@@ -122,6 +122,7 @@ td input.ed{width:11em} td input.edm{width:7.5em;text-align:right;font-family:va
 .btn.pri{background:var(--brand);border-color:var(--brand);color:var(--on-brand)}
 .btn.odoo{background:var(--violet-soft);border-color:transparent;color:var(--violet)}
 .btn.sm{padding:4px 9px;font-size:.76rem}
+.btn:disabled{opacity:.75;cursor:wait}
 .btn.danger{color:var(--out)}
 .btn.gest{background:var(--plan-soft);border-color:transparent;color:var(--plan)}
 .doclink{background:none;border:0;padding:0;font:inherit;color:var(--plan);font-weight:600;cursor:pointer;text-decoration:underline;text-decoration-color:color-mix(in srgb,var(--plan) 40%,transparent);text-underline-offset:3px}
@@ -247,7 +248,7 @@ body{margin:0}
         <span class="eyebrow">Tesorería · Flujo de caja semanal</span>
         <h1 id="titulo">Flujo de caja semanal</h1>
       </div>
-      <div class="topbtns"><span class="demo" id="syncInfo">Cargando…</span><span class="demo" id="userInfo"></span><button class="btn sm" id="reload" type="button">Recargar</button><button class="btn sm" id="logout" type="button">Salir</button></div>
+      <div class="topbtns"><span class="demo" id="syncInfo">Cargando…</span><span class="demo" id="userInfo"></span><button class="btn sm" id="reload" type="button" title="Trae los datos de Odoo en este momento. Tarda 1 a 2 minutos.">Recargar</button><button class="btn sm" id="logout" type="button">Salir</button></div>
     </div>
     <p class="answer" id="answer"></p>
   </div>
@@ -1147,11 +1148,53 @@ document.getElementById('mbCopy').addEventListener('click',()=>{
 /* ---------- render general ---------- */
 let currentTab='flujo';
 function render(){const M=movimientos(),MF=M.filter(m=>!m.depurar);renderTop(M);renderChart(MF);renderGrid(MF);renderCobranzas(M);renderPagar(M);renderObl();renderMB();renderComps();renderReport()}
-function toast(t){const d=document.createElement('div');d.className='toast';d.textContent=t;document.body.appendChild(d);setTimeout(()=>d.remove(),2600)}
+function toast(t,ms){const d=document.createElement('div');d.className='toast';d.textContent=t;document.body.appendChild(d);setTimeout(()=>d.remove(),ms||2600)}
 function copiar(txt,fbId,ok){
   const fb=document.getElementById(fbId);
   const p=navigator.clipboard&&navigator.clipboard.writeText?navigator.clipboard.writeText(txt):Promise.reject();
   p.then(()=>{fb.hidden=true;toast(ok)}).catch(()=>{fb.value=txt;fb.hidden=false;fb.focus();fb.select();toast('Selecciona el texto y cópialo.')});
+}
+
+/* ---------- actualizar desde Odoo (dispara el workflow de GitHub Actions) ---------- */
+let actualizando=false;
+const esperar=ms=>new Promise(r=>setTimeout(r,ms));
+async function ultimaCargaOk(){
+  const {data,error}=await sb.from('fs_sync_log').select('fin').eq('estado','ok').order('fin',{ascending:false}).limit(1);
+  if(error)throw new Error(error.message);
+  return data&&data[0]&&data[0].fin?new Date(data[0].fin).getTime():0;
+}
+async function actualizarDesdeOdoo(){
+  if(actualizando)return;
+  actualizando=true;
+  const btn=document.getElementById('reload'),textoBtn=btn.textContent,t0=Date.now();
+  const ESPERA_MAX=6*60*1000,CADA=8000;
+  btn.disabled=true;btn.textContent='Actualizando… 0:00';
+  const reloj=setInterval(()=>{const s=Math.floor((Date.now()-t0)/1000);btn.textContent=`Actualizando… ${Math.floor(s/60)}:${pad(s%60)}`},1000);
+  try{
+    const antes=await ultimaCargaOk();
+    const {data:ses}=await sb.auth.getSession();
+    if(!ses||!ses.session)throw new Error('La sesión expiró. Sal y vuelve a entrar.');
+    const r=await fetch(`${CONFIG.SUPABASE_URL}/functions/v1/actualizar-odoo`,{method:'POST',
+      headers:{'Content-Type':'application/json',apikey:CONFIG.SUPABASE_ANON_KEY,Authorization:`Bearer ${ses.session.access_token}`},body:'{}'});
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok||!j.ok)throw new Error(j.error||j.message||j.msg||`Error ${r.status}`);
+    toast('Odoo se está actualizando. Tarda 1 a 2 minutos; puedes seguir trabajando.',6000);
+    let listo=false;
+    while(Date.now()-t0<ESPERA_MAX){
+      await esperar(CADA);
+      const ahora=await ultimaCargaOk().catch(()=>0);
+      if(ahora>antes){listo=true;break}
+    }
+    if(!listo)throw new Error('La actualización tarda más de lo normal o falló. Revisa GitHub > Actions.');
+    await cargar();
+    toast('Datos de Odoo actualizados.',4000);
+  }catch(e){
+    console.error(e);
+    await cargar();
+    toast('No se actualizó desde Odoo: '+e.message,9000);
+  }finally{
+    clearInterval(reloj);btn.disabled=false;btn.textContent=textoBtn;actualizando=false;
+  }
 }
 
 /* ---------- eventos ---------- */
@@ -1200,7 +1243,7 @@ document.getElementById('tblComp').addEventListener('click',async e=>{const b=e.
   if(pendingDel!==b.dataset.del){pendingDel=b.dataset.del;renderComps();return}
   const id=b.dataset.del;S.comps=S.comps.filter(c=>c.id!==id);pendingDel=null;render();
   await guardar(sb.from('fs_compromisos').delete().eq('id',id),'Eliminado');});
-document.getElementById('reload').addEventListener('click',cargar);
+document.getElementById('reload').addEventListener('click',actualizarDesdeOdoo);
 document.getElementById('resOut').addEventListener('click',e=>{const tr=e.target.closest('tr[data-prov]');if(!tr)return;
   const q=document.getElementById('qOut');q.value=q.value===tr.dataset.prov?'':tr.dataset.prov;renderPagar(movimientos());
   document.getElementById('tblOut').scrollIntoView({behavior:'smooth',block:'start'});});
