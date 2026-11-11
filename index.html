@@ -485,10 +485,24 @@ const pad=n=>String(n).padStart(2,'0');
 const addD=(d,n)=>{const x=new Date(d);x.setDate(x.getDate()+n);return x};
 const iso=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
 const parse=s=>{const [y,m,dd]=String(s).slice(0,10).split('-').map(Number);return new Date(y,m-1,dd)};
-const HOY=(()=>{const d=new Date();d.setHours(0,0,0,0);return d})();
-const hoyS=iso(HOY);
-const LUNES=addD(HOY,-((HOY.getDay()+6)%7));
-const FIN_SEM=iso(addD(LUNES,6)),FIN_PROX=iso(addD(LUNES,13));
+/* La fecha de hoy y las semanas se recalculan solas: al cargar datos, al volver a la pestaña y cada minuto.
+   Antes se fijaban una sola vez al abrir la página y quedaban congeladas si la pestaña seguía abierta. */
+let HOY,hoyS,LUNES,FIN_SEM,FIN_PROX;
+function fijarHoy(){
+  const d=new Date();d.setHours(0,0,0,0);const s=iso(d);
+  if(s===hoyS)return false;
+  HOY=d;hoyS=s;LUNES=addD(HOY,-((HOY.getDay()+6)%7));FIN_SEM=iso(addD(LUNES,6));FIN_PROX=iso(addD(LUNES,13));
+  return true;
+}
+fijarHoy();
+function refrescarDia(){
+  const ant=hoyS;
+  if(!fijarHoy())return false;
+  ['rCorte','mbHasta','mbDesde','cFecha','selDate'].forEach(id=>{const el=document.getElementById(id);if(!el)return;
+    if(el.max===ant)el.max=hoyS;
+    if(id!=='mbDesde'&&el.value===ant)el.value=hoyS;});
+  return true;
+}
 const MESES=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
 const DIAS=['dom','lun','mar','mié','jue','vie','sáb'];
 const fd=s=>{if(!s)return'';const d=parse(s);return `${pad(d.getDate())}/${pad(d.getMonth()+1)}`};
@@ -529,6 +543,7 @@ async function traerTodo(tabla,orden){
 
 async function cargar(){
   document.getElementById('loading').hidden=false;
+  refrescarDia();
   try{
     const [b,d,m,a,map,g,h,c,p,log,ob,oc,mb]=await Promise.all([
       traerTodo('fs_bancos'),traerTodo('fs_documentos'),traerTodo('fs_movimientos_caja','odoo_line_id'),
@@ -1256,6 +1271,17 @@ document.addEventListener('click',e=>{if(e.target.id!=='verDep')return;
   bOut='dep';document.getElementById('estOut').value='';document.getElementById('tipoOut').value='';renderPagar(movimientos());
   document.getElementById('tab-pagar').scrollIntoView({behavior:'smooth',block:'start'});});
 document.getElementById('logout').addEventListener('click',async()=>{await sb.auth.signOut();location.reload()});
+
+/* ---------- si cambió el día con la página abierta, recalcular semanas ---------- */
+function siCambioElDia(){
+  if(document.hidden||document.getElementById('app').hidden)return;
+  if(!refrescarDia())return;
+  selCell=null;evaluarCuotas();prepararMB();render();
+  toast('Cambió el día: semanas actualizadas al '+fdl(HOY)+'.',5000);
+}
+document.addEventListener('visibilitychange',siCambioElDia);
+window.addEventListener('focus',siCambioElDia);
+setInterval(siCambioElDia,60000);
 
 /* ---------- login y arranque ---------- */
 function prepararUI(){
