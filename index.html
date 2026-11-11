@@ -182,6 +182,14 @@ textarea.fallback{width:100%;max-width:1260px;display:block;margin:8px auto 0;he
 footer{font-size:.78rem;color:var(--muted);display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:center}
 .empty{color:var(--muted);font-size:.85rem;padding:12px 0}
 .sr{position:absolute;left:-9999px}
+/* Detalle de anticipos y nombres en el detalle de celdas */
+td.nom{min-width:240px;max-width:360px;white-space:normal;word-break:normal;overflow-wrap:normal}
+.antdet summary{cursor:pointer;list-style:none;color:var(--plan);font-weight:700;white-space:nowrap}
+.antdet summary::-webkit-details-marker{display:none}
+.antdet summary::after{content:' ▸';font-size:.7rem}
+.antdet[open] summary::after{content:' ▾'}
+.antmini{margin:6px 0 2px auto;font-size:.76rem;border-collapse:collapse}
+.antmini td{padding:2px 0 2px 10px;border:0;white-space:nowrap}
 /* Informe de comportamiento */
 .rephead{display:flex;flex-direction:column;gap:2px;border-left:4px solid var(--brand-2);padding-left:12px}
 .rephead .co{font-weight:800;font-size:1.05rem}
@@ -752,11 +760,11 @@ function detalleCelda(L){
   const extraTh=hayOC?`<th class="r">Total OC</th>${hayFac?'<th class="r">Facturado</th>':''}<th class="r">Anticipos</th><th class="r">Saldo</th>`:'<th class="r">Monto</th>';
   const fila=m=>{const o=ocDe(m);
     if(!hayOC)return `<td class="r num">${$m(m.monto)}</td>`;
-    return o?`<td class="r num">${$m(o.total)}</td>${hayFac?`<td class="r num">${$m(o.facturado)}</td>`:''}<td class="r num">${o.anticipos>0.004?$m(o.anticipos):'–'}${antDeOC(o.id)}</td><td class="r num"><b>${$m(m.monto)}</b></td>`
+    return o?`<td class="r num">${$m(o.total)}</td>${hayFac?`<td class="r num">${$m(o.facturado)}</td>`:''}<td class="r num">${antCelda(o)}</td><td class="r num"><b>${$m(m.monto)}</b></td>`
       :`<td class="r num">${$m(m.monto)}</td>${hayFac?'<td class="r num">–</td>':''}<td class="r num">–</td><td class="r num"><b>${$m(m.monto)}</b></td>`};
   const pie=hayOC?`<td class="r num">${$m(tTot)}</td>${hayFac?`<td class="r num">${$m(tFac)}</td>`:''}<td class="r num">${$m(tAnt)}</td><td class="r num">${$m(sum(L))}</td>`:`<td class="r num">${$m(sum(L))}</td>`;
   return `<div class="scroll"><table><thead><tr><th>Fecha</th><th>Nombre</th><th>Documento</th><th>Estado</th>${extraTh}<th></th></tr></thead><tbody>${
-    L.map(m=>`<tr><td class="num">${fd(m.fecha)}</td><td>${esc(m.partner)}</td><td>${docHtml(m)}</td><td><span class="pill ${pillCls(m.estado)}">${m.estado}</span></td>${fila(m)}<td><button class="btn sm gest" type="button" data-open="${esc(m.key)}">Gestionar</button></td></tr>`).join('')
+    L.map(m=>`<tr><td class="num" style="white-space:nowrap">${fd(m.fecha)}</td><td class="nom">${esc(m.partner)}</td><td style="white-space:nowrap">${docHtml(m)}</td><td><span class="pill ${pillCls(m.estado)}">${m.estado}</span></td>${fila(m)}<td><button class="btn sm gest" type="button" data-open="${esc(m.key)}">Gestionar</button></td></tr>`).join('')
   }</tbody><tfoot><tr><td colspan="4">${L.length} documentos</td>${pie}<td></td></tr></tfoot></table></div>`;
 }
 
@@ -796,11 +804,13 @@ function filtradosOut(M){
   return M.filter(m=>m.dir==='out'&&(!bOut||m.bucket===bOut)&&(!t||m.tipo===t)&&(!e||m.estado===e)&&(!q||norm(m.partner+' '+m.doc+' '+(m.detalle||'')).includes(q)));
 }
 const bancoNombre=c=>{const b=BANCOS.find(x=>x.cod===c);return b?b.nombre:''};
-// Pagos de anticipo amarrados a una OC (vienen de fs_anticipos)
-function antDeOC(id){
-  if(!ANT)return '';
-  const L=ANT.filter(a=>a.ocIds.includes(id));
-  return L.map(a=>`<div style="font-size:.74rem;line-height:1.3;margin-top:2px"><a class="ext" style="margin:0" href="${odooUrl('account.payment',a.id)}" target="_blank" rel="noopener" title="${esc(a.concepto)}">${esc(a.pago)} · ${fd(a.fecha)} · ${$m(a.pend)} ↗</a></div>`).join('');
+// Celda de anticipos de una OC: muestra el total; al tocarlo se despliega el detalle de los pagos (vienen de fs_anticipos)
+function antCelda(o){
+  const L=ANT?ANT.filter(a=>a.ocIds.includes(o.id)):[];
+  if(!L.length)return o.anticipos>0.004?$m(o.anticipos):'–';
+  return `<details class="antdet"><summary title="Ver los pagos de anticipo">${$m(o.anticipos)} <span class="hint">(${L.length})</span></summary><table class="antmini"><tbody>${
+    L.map(a=>`<tr><td><a class="ext" style="margin:0" href="${odooUrl('account.payment',a.id)}" target="_blank" rel="noopener" title="${esc(a.concepto)}">${esc(a.pago)} ↗</a></td><td class="num">${fd(a.fecha)}/${String(a.fecha).slice(2,4)}</td><td class="r num">${$m(a.pend)}</td></tr>`).join('')
+  }</tbody></table></details>`;
 }
 function renderPagar(M){
   renderBuckets('bucketsOut',M,'out',bOut);
@@ -814,7 +824,7 @@ function renderPagar(M){
   h+=`</tbody><tfoot><tr><td colspan="6">${L.length} documentos</td><td class="r num">${$m(sum(L))}</td><td colspan="3"></td></tr></tfoot>`;
   document.getElementById('tblOut').innerHTML=L.length?h:'<tbody><tr><td class="empty">Nada coincide con el filtro.</td></tr></tbody>';
   document.getElementById('tblOC').innerHTML=`<thead><tr><th>OC</th><th>Proveedor</th><th>Creada</th><th class="r">Total</th><th class="r">Facturado</th><th class="r">Anticipos</th><th class="r">Saldo</th><th>Forma de pago</th></tr></thead><tbody>${
-    OC.map(o=>`<tr><td><a class="ext" style="margin:0;font-size:.86rem" href="${odooUrl('purchase.order',o.id)}" target="_blank" rel="noopener">${esc(o.doc)} ↗</a></td><td>${esc(o.partner)}</td><td class="num">${fd(o.creada)}</td><td class="r num">${$m(o.total)}</td><td class="r num">${$m(o.facturado)}</td><td class="r num">${$m(o.anticipos)}${antDeOC(o.id)}</td><td class="r num"><b>${$m(o.saldo)}</b></td><td>${esc(o.forma)}</td></tr>`).join('')
+    OC.map(o=>`<tr><td><a class="ext" style="margin:0;font-size:.86rem" href="${odooUrl('purchase.order',o.id)}" target="_blank" rel="noopener">${esc(o.doc)} ↗</a></td><td>${esc(o.partner)}</td><td class="num">${fd(o.creada)}</td><td class="r num">${$m(o.total)}</td><td class="r num">${$m(o.facturado)}</td><td class="r num">${antCelda(o)}</td><td class="r num"><b>${$m(o.saldo)}</b></td><td>${esc(o.forma)}</td></tr>`).join('')
   }</tbody><tfoot><tr><td colspan="6">Saldo total por pagar en OC</td><td class="r num">${$m(OC.reduce((s,o)=>s+o.saldo,0))}</td><td></td></tr></tfoot>`;
   document.getElementById('dlProv').innerHTML=[...new Set(M.filter(m=>m.dir==='out').map(m=>m.partner))].sort().map(p=>`<option value="${esc(p)}">`).join('');
   // Resumen por proveedor de lo que está filtrado
